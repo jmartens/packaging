@@ -2,8 +2,8 @@
 # Build script for MythTV
 # Created by Lawrence Rust, lvr at softsystem dot co dot uk
 #
-# For use on:
-# - Windows 2k/XP/Vista/7 to build a native MythTV using the MSYS environment and MingGW
+# For use:
+# - On Windows 2k/XP/Vista/7 to build a native MythTV using the MSYS environment and MingGW
 #   http://sourceforge.net/projects/mingw/files
 #   # NB Min specs: 1GB (2GB for debug build) VM, physical RAM preferable, and 5GB disk
 #   Click:
@@ -20,22 +20,28 @@
 #   At the Msys prompt enter:
 #     ./mythbuild.sh
 #   or for a debug build type:
-#     ./mythbuild.sh -H -d
+#     ./mythbuild.sh -d
 #
-# - Linux to cross build a Windows installation using the MinGW C cross compiler from
+# - On Linux to cross build a Windows installation using the MinGW C cross compiler from
 #   http://sourceforge.net/projects/mingw/files/Cross-Hosted%20MinGW%20Build%20Tool/
+#   Install the cross compiler.  On Debian:
+#     sudo apt-get install mingw32
+#   On Fedora:
+#     sudo yum install mingw32-gcc.i686 mingw32-gcc-g++.i686
+#   You will also need the Gnu C/C++ compiler and these packages:
+#     wget patch git-core
 #   At a command prompt type:
 #     ./mythbuild.sh -W
 #   or for a debug build type:
 #     ./mythbuild.sh -W -d
 #
-# - Linux to build a native MythTV.
+# - On Linux to build a native MythTV.
+#   You will need the Gnu C/C++ compiler and these packages:
+#     wget patch git-core
 #   At a command prompt type:
 #     ./mythbuild.sh -H
 #   or for a debug build type:
 #     ./mythbuild.sh -H -d
-
-readonly myname=`basename "$0"`
 
 # Myth code repo
 : ${MYTHREPO:="http://mythtv-for-windows.googlecode.com/files"}
@@ -108,19 +114,19 @@ readonly myname=`basename "$0"`
 : ${WININSTALLER:="mythinstaller-win32"}
 : ${WININSTALLER_URL:="http://www.softsystem.co.uk/download/mythtv/$WININSTALLER.tar.bz2"}
 
-# Dir for myth sources
-: ${MYTHDIR:=$PWD}
-
 # Package debug build: yes|no|auto, auto=follow MYTHBUILD
+: ${QT_DEBUG:="auto"}
+: ${MYSQL_DEBUG:="auto"}
 : ${LAME_DEBUG:="auto"}
 : ${FLAC_DEBUG:="no"}
 : ${TAGLIB_DEBUG:="no"}
 : ${FFTW_DEBUG:="no"}
 : ${LIBVISUAL_DEBUG:="no"}
-: ${MYSQL_DEBUG:="auto"}
-: ${QT_DEBUG:="auto"}
 # These packages are rebuilt whenever MYTHBUILD changes
-readonly debug_packages="LAME FLAC TAGLIB FFTW LIBVISUAL MYSQL QT"
+readonly debug_packages="QT MYSQL LAME FLAC TAGLIB FFTW LIBVISUAL"
+
+# Dir for myth sources
+: ${MYTHDIR:=$PWD}
 
 # Working dir for downloads & sources
 if [ -d "$MYTHDIR/mythwork" ]; then
@@ -134,51 +140,69 @@ else
 fi
 
 # Default parameters
-MYTHTARGET=""
-MYTHBUILD=""
-MYTHBRANCH=""
-makeflags=""
-makejobs=""
+MYTHTARGET=
+MYTHBUILD=
+MYTHBRANCH=
 readtimeout=60
 logging="no"
-unpatch="no"
+patches=
 cleanbuild="no"
 reconfig="no"
+if [ -n "$NUMBER_OF_PROCESSORS" ]; then
+    cpus=$NUMBER_OF_PROCESSORS
+elif [ -r "/proc/cpuinfo" ]; then
+    cpus=`grep -c processor /proc/cpuinfo`
+else
+    cpus=1
+fi
+[ $cpus -gt 1 ] && makejobs=`expr $cpus + 1` || makejobs=1
+makeflags=
 
 
 ###############################################################
 # Parse the command line
 ###############################################################
+readonly myname=`basename "$0"`
+readonly myargs="$@"
+readonly currdir=$PWD
+
 function myhelp() {
     echo "A script to build MythTV"
-    echo "Usage: $myname [options]"
+    echo "Usage: $myname [options] [packages_to_make]"
     echo "Options:"
-    echo "  -b tag      Checkout MythTV branch [${MYTHBRANCH:-"fixes/0.24"}]"
-    echo "  -r          Switch to release build"
-    echo "  -d          Switch to debug build"
-    echo "  -p <path>   Set install prefix [$MYTHINSTALL]"
-    echo "  -W          Set target to Windows"
-    echo "  -H          Set target to Host"
-    echo "  -l          Save mythbuild.log"
-    echo "  -j n        Max number of make jobs [cpus+1]"
-    echo "  -s          Silent make"
-    echo "  -t <n>      Set default timeout after configure"
-    echo "  -C          Force a clean re-build"
-    echo "  -R          Reverse patches applied to mythtv & mythplugins"
-    echo "  -h          Display this help and exit"
-    echo "  -v          Display version and exit"
+    echo "  -b tag        Checkout MythTV branch [${MYTHBRANCH:-"fixes/0.24"}]"
+    echo "  -r           *Release build (sticky)"
+    echo "  -d            Debug build (sticky)"
+    echo "  -p            Profile build (sticky)"
+    echo "  -I <path>     Install prefix [${MYTHINSTALL#$MYTHDIR/}]"
+    echo "  -W           *Build for Windows (sticky)"
+    echo "  -H            Build for Host (sticky)"
+    echo "  -l            Tee stdout and stderr to mythbuild.log"
+    echo "  -j n          Number of parallel make jobs [$makejobs]"
+    echo "  -s            Silent make"
+    echo "  -t <n>        Timeout after configure [$readtimeout Seconds]"
+    echo "  -C            Force a clean re-build"
+    echo "  -P            Apply all patches to mythtv and mythplugins then exit"
+    echo "  -R            Reverse all patches applied to mythtv & mythplugins then exit"
+    echo "  -h            Display this help then exit"
+    echo "  -v            Display version then exit"
     echo ""
-    echo "The following shell variables are useful:"
-    echo "MYTHDIR       Build tree root [current directory]"
-    echo "MYTHWORK      Directory to unpack and build packages [MYTHDIR/mythbuild]"
-    echo "MYTHPATCHES   Patches [$MYTHPATCHES]"
-    echo "MYTHGIT       Myth git repository [$MYTHGIT]"
-    echo "MYTHREPO      Primary mirror [$MYTHREPO]"
-    echo "SOURCEFORGE   Sourceforge mirror [$SOURCEFORGE]"
-    echo "QT            QT version [$QT]"
-    echo "QT_DEBUG      QT debug build (yes|no|auto) [$QT_DEBUG]"
-    echo "MYSQL         MYSQL version [$MYSQL]"
-    echo "MYSQL_DEBUG   MYSQL debug build (yes|no|auto) [$MYSQL_DEBUG]"
+    echo "The following shell variables are influential:"
+    echo "MYTHDIR         Build tree root [current directory]"
+    echo "MYTHWORK        Directory to unpack and build packages [${MYTHWORK#$MYTHDIR/}]"
+    echo "MYTHPATCHES     Patches to apply [$MYTHPATCHES]"
+    echo "MYTHGIT         Myth git repository [$MYTHGIT]"
+    echo "MYTHREPO        Primary mirror [$MYTHREPO]"
+    echo "SOURCEFORGE     Sourceforge mirror [$SOURCEFORGE]"
+    echo "<name>_CFG      Additional configure options for package <name> e.g."
+    echo "                MYTHTV MYTHPLUGINS QT MYSQL FREETYPE LAME LIBEXIF LIBXML2"
+    echo "                LIBOGG LIBVORBIS FLAC LIBCDIO TAGLIB FFTW LIBSDL LIBVISUAL"
+    echo "                Set to \" \" to force configure & rebuild of the package."
+    local pkg dbg
+    for pkg in $debug_packages ; do
+        dbg=${pkg}_DEBUG
+        printf "%-15s %s debugging (yes|no|auto) [%s]\n" $dbg $pkg ${!dbg} 
+    done
 }
 function version() {
     echo "$myname version 0.3"
@@ -190,17 +214,17 @@ function die() {
 }
 
 # Options
-while getopts ":b:dj:lst:p:rhvCHWR" opt
+while getopts ":b:dj:lprst:hvCHI:PRW" opt
 do
     case "$opt" in
         b) [ "${OPTARG:0:1}" = "-" ] && die "Invalid branch tag: $OPTARG"
             MYTHBRANCH=$OPTARG ;;
         d) MYTHBUILD="debug" ;;
+        p) MYTHBUILD="profile" ;;
         r) MYTHBUILD="release" ;;
         j) [ $OPTARG -lt 0 -o $OPTARG -gt 99 ] && die "Invalid number of jobs: $OPTARG"
            [ $OPTARG -lt 1 ] && die "Invalid make jobs: $OPTARG"
             makejobs=$OPTARG ;;
-        p) [ -d "$OPTARG" ] && MYTHINSTALL=$OPTARG || die "No such directory: $OPTARG" ;;
         s) makeflags="-s" ;;
         t) [ $OPTARG \< 0 -o $OPTARG -gt 999 ] && die "Invalid timeout: $OPTARG"
             readtimeout=$OPTARG ;;
@@ -208,7 +232,9 @@ do
         C) cleanbuild="yes" ;;
         H) MYTHTARGET="Host" ;;
         W) MYTHTARGET="Windows" ;;
-        R) unpatch="yes" ;;
+        I) [ -d "$OPTARG" ] && MYTHINSTALL=$OPTARG || die "No such directory: $OPTARG" ;;
+        P) patches="apply" ;;
+        R) patches="reverse" ;;
         h) myhelp; exit ;;
         v) version; exit ;;
         \?) [ -n "$OPTARG" ] && die "Invalid option -$OPTARG" ;;
@@ -219,7 +245,7 @@ done
 shift `expr $OPTIND - 1`
 
 # Arguments
-[ $# -gt 0 ] && die "Excess arguments"
+#[ $# -gt 0 ] && die "Excess arguments"
 
 
 ###############################################################
@@ -314,17 +340,18 @@ function unpack() {
 }
 
 # Apply patches to a component
-# $1= component name
+# $1= component name, $2... args to patch
 function dopatches() {
-    local i ret=0 p patched
-    for i in $MYTHDIR/$MYTHPATCHES/$1/*.diff ; do
+    local d=$1 i ret=0 p patched
+    shift
+    for i in $MYTHDIR/$MYTHPATCHES/$d/*.diff ; do
         if [ -r "$i" ]; then
             p=`basename "$i" ".diff"`
             patched="patch-$p.applied"
             if [ ! -e "$patched" ]; then
-                echo "Applying patch $1/`basename $i`"
-                patch -p1 -i "$i"
-                touch "$patched"
+                echo "Applying patch $d/`basename $i`"
+                patch -p1 -i "$i" $@
+                [ "$1" != "--dry-run" ] && touch "$patched"
                 let ++ret
             fi
         fi
@@ -333,16 +360,17 @@ function dopatches() {
 }
 
 # Undo patches to a component
-# $1= component name
+# $1= component name, $2... args to patch
 function undopatches() {
-    local i p patched
-    for i in $MYTHDIR/$MYTHPATCHES/$1/*.diff ; do
+    local d=$1 i p patched
+    shift
+    for i in $MYTHDIR/$MYTHPATCHES/$d/*.diff ; do
         if [ -r "$i" ]; then
             p=`basename "$i" ".diff"`
             patched="patch-$p.applied"
             if [ -e "$patched" ]; then
-                echo "Reversing patch $1/`basename $i`"
-                patch -p1 -R -E -i "$i" || true
+                echo "Reversing patch $d/`basename $i`"
+                patch -p1 -R -E -i "$i" $@ || true
                 rm -f "$patched"
             fi
         fi
@@ -367,14 +395,12 @@ function gitbranch() {
 function make_distclean() {
     echo "make distclean..."
     $make -s -k distclean >/dev/null 2>&1 || true
-    return 0
 }
 
 # make uninstall
 function make_uninstall() {
     echo "make uninstall..."
     $make -s -k uninstall >/dev/null 2>&1 || true
-    return 0
 }
 
 # Test if building debug version of package
@@ -411,7 +437,7 @@ function listfiles() {
     done
 }
 
-# Make installed stamp filename
+# 'make install' done indicator filename
 # $1= package
 function installed() {
     echo "$MYTHWORK/installed-$1"
@@ -422,14 +448,9 @@ function installed() {
 # Installation check
 ###############################################################
 
-readonly bindir="$MYTHINSTALL/bin"
-readonly incdir="$MYTHINSTALL/include"
-readonly libdir="$MYTHINSTALL/lib"
-readonly windir="$MYTHINSTALL/win32"
-
 # ./configure done indicator
 readonly stampconfig="stamp.mythtv.org"
-# make install done indicator
+# make done indicator
 readonly stampbuild="stampbuild.mythtv.org"
 
 # Myth build type
@@ -440,6 +461,8 @@ case "$MYTHBUILD" in
         elif [ -e "$MYTHDIR/mythtv/mythtv/$stampconfig.profile" -o \
                -e "$MYTHDIR/mythtv/mythplugins/$stampconfig.profile" ]; then
             MYTHBUILD="profile"
+        elif [ -e "$MYTHWORK/$QT/$stampconfig.debug" ]; then
+            MYTHBUILD="debug"
         else
             MYTHBUILD="release"
         fi
@@ -453,13 +476,13 @@ esac
 : ${MYTHBRANCH:=`gitbranch "$MYTHDIR/mythtv"`}
 : ${MYTHBRANCH:="fixes/0.24"}
 case "$MYTHBRANCH" in
-    master*) : ${MYTHVER:="master"} ;;
-    fixes/*) : ${MYTHVER:=${MYTHBRANCH/fixes\//}} ;;
-    *) : ${MYTHVER:=""} ;;
+    master) MYTHVER="master" ;;
+    fixes/*) MYTHVER=${MYTHBRANCH#fixes/} ;;
+    *) MYTHVER=${MYTHBRANCH//\//-} ;;
 esac
 
 
-# Determine build type
+# Determine target build type
 readonly stamptarget="$MYTHWORK/target"
 if [ "$MSYSTEM" = "MINGW32" ]; then
     # Native Windows
@@ -473,10 +496,13 @@ else
     Windows|windows) # Cross compile to Windows
         MYTHTARGET="Windows"
         if [ -z "$xprefix" ]; then
+            # Ubuntu 10.10
             if which i586-mingw32msvc-gcc >/dev/null 2>&1 ; then
                 xprefix="i586-mingw32msvc"
+            # Mandriva 2010.2 (32 bit)
             elif which i586-pc-mingw32-gcc >/dev/null 2>&1 ; then
                 xprefix="i586-pc-mingw32"
+            # Fedora 14
             elif which i686-pc-mingw32-gcc >/dev/null 2>&1 ; then
                 xprefix="i686-pc-mingw32"
             elif xcc=`locate "/usr/bin/i*mingw32*-gcc" 2>/dev/null` ; then
@@ -503,6 +529,10 @@ if [ "$MSYSTEM" = "MINGW32" -o "$MYTHTARGET" != "Windows" ]; then
 else 
     #bprefix=`gcc -dumpmachine`
     machine=`uname -m`
+    case "$machime" in
+        x86|i86pc) machine="ix86" ;;
+        amd64|AMD64) machine="x86_64" ;;
+    esac
     kernel=`uname -s`
     platform=`uname -i`
     os=`uname -o`
@@ -510,7 +540,7 @@ else
         GNU*|Gnu*|gnu*) os="gnu" ;;
     esac
     case "$machine:$kernel:$platform:$os" in
-        i*86:Linux:*:*) bprefix="$machine-pc-linux-$os" ;;
+        i?86:Linux:*:*) bprefix="$machine-pc-linux-$os" ;;
         x86_64:Linux:*:*) bprefix="$machine-unknown-linux-$os" ;;
         ppc*:Linux:*:*) bprefix="$machine-$platform-linux-$os" ;;
         *:Linux:*:*) bprefix="$machine-$platform-linux-$os" ;;
@@ -522,28 +552,43 @@ fi
 # Redirect output to log file as if invoked by: mythbuild.sh 2>&1 | tee -a mythbuild.log
 if [ "$logging" = "yes" ]; then
     pipe=`mktemp -u`
-    mkfifo "$pipe"
-    trap "rm -f $pipe" EXIT
-    tee -a "${myname%.sh}.log" < "$pipe" &
-    exec > "$pipe" 2>&1
+    if mkfifo "$pipe" >/dev/null 2>&1 ; then
+		trap "rm -f $pipe" EXIT
+		tee -a "${myname%.sh}.log" < "$pipe" &
+        echo "`version` invoked with: $myargs" >> "$pipe" 
+		exec > "$pipe" 2>&1
+	else
+		echo "Unable to create named FIFO, logging disabled" >&2
+	fi
 fi
 
 
-if [ "$unpatch" = "yes" ]; then
-    banner "Reversing all MythTV branch $MYTHBRANCH patches."
+# Apply/reverse Myth patches
+# $1=message $2=action $3.. args to patch
+function patchmyth() {
+    local message=$1 action=$2
+    shift 2
+    banner "$message all MythTV branch $MYTHBRANCH patches."
     read -p "Press [Return] to continue or [Control-C] to abort: "
-    if [ -d "$MYTHDIR/mythtv/mythtv" ]; then
-        cd "$MYTHDIR/mythtv/mythtv"
+    if [ -d "$MYTHDIR/mythtv/mythtv" -a -d "$MYTHDIR/$MYTHPATCHES" ]; then
+        pushd "$MYTHDIR/mythtv/mythtv" >/dev/null
         rm -f $stampconfig*
-        [ -d "$MYTHDIR/$MYTHPATCHES" ] && undopatches "mythtv${MYTHVER:+-$MYTHVER}"
+        $action "mythtv${MYTHVER:+-$MYTHVER}" $@ || true
+        popd >/dev/null
     fi
-    if [ -d "$MYTHDIR/mythtv/mythplugins" ]; then
-        cd "$MYTHDIR/mythtv/mythplugins"
+    if [ -d "$MYTHDIR/mythtv/mythplugins" -a -d "$MYTHDIR/$MYTHPATCHES" ]; then
+        pushd "$MYTHDIR/mythtv/mythplugins" >/dev/null
         rm -f $stampconfig*
-        [ -d "$MYTHDIR/$MYTHPATCHES" ] && undopatches "mythplugins${MYTHVER:+-$MYTHVER}"
+        $action "mythplugins${MYTHVER:+-$MYTHVER}" $@ || true
+        popd >/dev/null
     fi
-    exit
-fi
+}
+case "$patches" in
+    "") ;;
+    apply) patchmyth "Apply" "dopatches" $@ ; exit ;;
+    reverse) patchmyth "Reverse" "undopatches" $@ ; exit ;;
+    *) die "Unknown patches option: $patches" ;;
+esac
 
 
 # Display Myth branch & build type and wait for OK
@@ -559,16 +604,38 @@ cd "$MYTHWORK"
 
 # Check for clean re-build
 if [ "$cleanbuild" = "yes" ]; then
-    echo "Clean rebuild"
-    rm -rf "$MYTHINSTALL/"
+    echo "NOTE: Clean rebuild"
     for d in $MYTHWORK/* ; do [ -d "$d" ] && rm -rf "$d" ; done
-    rm "$stamptarget-$MYTHTARGET"
+    # Force a reconfigure
+    rm -f "$stamptarget-$MYTHTARGET"
+else
+    # Re-make named packages
+    while [ $# -gt 0 ] ; do
+        name=$1; shift
+        case "$name" in
+            MYTHTV|mythtv)
+                rm -f "$MYTHDIR/mythtv/mythtv/$stampbuild"
+            ;;
+            MYTHPLUGINS|mythplugins)
+                rm -f "$MYTHDIR/mythtv/mythplugins/$stampbuild"
+            ;;
+            MYTHTHEMES|myththemes)
+                rm -f "$MYTHDIR/myththemes/$stampbuild"
+            ;;
+            *)
+                [ -n "${!name}" ] || die "No such package: $name"
+                rm -f "$MYTHWORK/${!name}/$stampbuild"
+            ;;
+        esac
+        echo "NOTE: make $name"
+    done
 fi
 
 
 # Test if changing target
 if [ ! -e "$stamptarget-$MYTHTARGET" ]; then
-    echo "Reconfiguring all packages"
+    echo "NOTE: Target type changed, reconfiguring all packages"
+    rm -rf "$MYTHINSTALL/"
     rm -f $( installed '*')
     rm -f $stamptarget-*
     touch "$stamptarget-$MYTHTARGET"
@@ -593,25 +660,22 @@ done
 # Check for & install required tools
 ###############################################################
 
+readonly bindir="$MYTHINSTALL/bin"
+readonly incdir="$MYTHINSTALL/include"
+readonly libdir="$MYTHINSTALL/lib"
+readonly windir="$MYTHINSTALL/win32"
+
 mkdir -p "$bindir" "$incdir" "$libdir"
 
 # Set PATH for configure scripts needing freetype-config & taglib-config sh scripts
 export PATH="$bindir:$PATH"
 
 # Check make
-! make --version >/dev/null 2>&1 && die "make is not installed."
+make --version >/dev/null 2>&1 || die "make is not installed."
 
-# Parallel make
-if [ -n "$NUMBER_OF_PROCESSORS" ]; then
-    cpus=$NUMBER_OF_PROCESSORS
-elif [ -r "/proc/cpuinfo" ]; then
-    cpus=`grep -c processor /proc/cpuinfo`
-else
-    cpus=1
-fi
-[ -n "$makejobs" ] && [ $cpus -gt $makejobs ] && cpus=$makejobs
-if [ $cpus -gt 1 ]; then
-    make="make $makeflags -j $(($cpus +1))"
+if [ $makejobs -gt 1 ]; then
+    # Parallel make
+    make="make $makeflags -j $makejobs"
 else
     make="make $makeflags"
 fi
@@ -665,10 +729,16 @@ name=$MYTHPATCHES; url=$MYTHPATCHES_URL; arc=`basename "$url"`
 if [ ! -d "$name" ]; then
     banner "Installing $name..."
     unpack "$arc"
-    echo "Patches updated.  Refreshing all packages"
+    echo "Patches updated.  Re-building all packages"
     clean="yes"
 fi
 popd >/dev/null
+
+if [ ! -d "$MYTHDIR/$MYTHPATCHES/mythtv-$MYTHVER" ]; then
+    echo "WARNING: Patches are not available for the branch '$MYTHBRANCH'"
+    echo "WARNING: Building MythTV may fail."
+    read -p "Press [Return] to continue or [Control-C] to abort: "
+fi
 
 # Apply the mingw <float.h> patch for Qt
 # Qt tools/qlocale.cpp:6628: error: ‘_clear87’ was not declared in this scope
@@ -686,7 +756,7 @@ function patchmingw() {
             path1="/usr/$xprefix/include"
             path2="/usr/lib/gcc/$xprefix/$gccversion/include"
         ;;
-        i586-pc-mingw32)
+        i586-pc-mingw32) # Mandriva 2010.2 (32 bit)
             path1="/usr/$xprefix/sys-root/mingw/include"
             path2="/usr/lib/gcc/$xprefix/$gccversion/include"
         ;;
@@ -826,7 +896,7 @@ fi
 
 readonly arch=$( [ "$MYTHTARGET" = "Windows" ] && echo "i686" || uname -m)
 case $arch in
-    i?86)
+    i?86|x86|i86pc|x86_64|amd64|AMD64)
         # Need YASM for FFMpeg - http://www.tortall.net/projects/yasm
         if ! which yasm >/dev/null 2>&1 ; then
             name=$YASM; url=$YASM_URL; arc=`basename "$url"`
@@ -834,13 +904,13 @@ case $arch in
             banner "Building $name..."
             [ ! -d "$name" ] && unpack "$arc"
             pushd "$name" >/dev/null
-            ./configure -q "--prefix=$MYTHINSTALL"
+            ./configure -q "--prefix=$MYTHINSTALL" $YASM_CFG
             $make
             $make -s install
             popd >/dev/null
         fi
     ;;
-    ppc)
+    ppc*)
         # To run mythtv need to build all shared libs withoot R_PPC_REL24 relocations.
         # 24-bit (4*16Meg) limit to pc relative addresses causes ld.so to fail
         export CFLAGS="-fPIC $CFLAGS"
@@ -868,7 +938,9 @@ function build() {
     local libcfg=${lib}_CFG
     local libdbg=${lib}_DEBUGFLAG
     local name=${!lib}
+    [ -n "$name" ] || die "No directory for $lib"
     local url=${!liburl}
+    [ -n "$url" ] || die "No URL for $lib"
     local arc=`basename "$url"`
 
     # Debug build?
@@ -903,7 +975,7 @@ function build() {
         rm -f "$stampconfigtag"
         [ -e Makefile ] && make_distclean || true
         set -x
-        ./configure -q "--prefix=$MYTHINSTALL" ${xprefix:+--host=$xprefix} \
+        ./configure "--prefix=$MYTHINSTALL" ${xprefix:+--host=$xprefix} \
             ${bprefix:+--build=$bprefix} $debugflag $@ ${!libcfg}
         set +x
         pausecont
@@ -912,7 +984,7 @@ function build() {
     fi
 
     # make
-    stampinstall="$( installed $name)"
+    local stampinstall="$( installed $name)"
     if [ ! -e "$stampbuild" ] ; then
         $make
         touch "$stampbuild"
@@ -942,7 +1014,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     dopatches "$name" || rm -f "$stampbuild"
     [ "$reconfig" = "yes" ] && rm -f "$stampbuild"
     if [ ! -e "$stampbuild" ] ; then
-        $make -s -f GNUmakefile ${xprefix:+CROSS=$xprefix-} clean > /dev/null 2>&1
+        $make -s -k -f GNUmakefile ${xprefix:+CROSS=$xprefix-} clean > /dev/null 2>&1
         $make -f GNUmakefile ${xprefix:+CROSS=$xprefix-} GC ${!compcfg}
         touch "$stampbuild"
         rm -f "$stampinstall"
@@ -972,15 +1044,34 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     dopatches "$name" || rm -f "$stampbuild"
     [ "$reconfig" = "yes" ] && rm -f "$stampbuild"
     if [ ! -e "$stampbuild" ] ; then
-        $make -f win32/Makefile.gcc clean
-        $make -f win32/Makefile.gcc ${xprefix:+PREFIX=$xprefix-} SHARED_MODE=1
+        $make -s -k -f win32/Makefile.gcc clean
+        $make -f win32/Makefile.gcc ${xprefix:+PREFIX=$xprefix-} SHARED_MODE=1 IMPLIB=libz.dll.a
         touch "$stampbuild"
         rm -f "$stampinstall"
     fi
     if [ ! -e "$stampinstall" ]; then
         $make -s -f win32/Makefile.gcc \
             "BINARY_PATH=$bindir" "INCLUDE_PATH=$incdir" "LIBRARY_PATH=$libdir" \
-            SHARED_MODE=1 install
+            SHARED_MODE=1 IMPLIB=libz.dll.a install
+        # Create libtool file needed by taglib
+        cat > "$libdir/libz.la" <<-END
+			# libz.la - a libtool library file
+			# Generated by ltmain.sh (GNU libtool)
+			dlname='$bindir/zlib1.dll'
+			library_names='libz.dll.a'
+			old_library='libz.a'
+			inherited_linker_flags=''
+			dependency_libs='-lmsvcrt'
+			weak_library_names=''
+			current=0
+			age=0
+			revision=1
+			installed=yes
+			shouldnotlink=no
+			dlopen=''
+			dlpreopen=''
+			libdir='$libdir'
+		END
         touch "$stampinstall"
     fi
     popd >/dev/null
@@ -988,6 +1079,8 @@ fi
 
 ###############################################################################
 # Install freetype - http://savannah.nongnu.org/projects/freetype/
+# Including path to zlib
+CPPFLAGS="-I$incdir $CPPFLAGS" LDFLAGS="-L$libdir $LDFLAGS" \
 build FREETYPE
 
 ###############################################################################
@@ -997,11 +1090,26 @@ build LAME
 
 ###############################################################################
 # Install libxml2 - http://xmlsoft.org
+
 # BUG building with MSys get error in testThreads.c line 110
-# And also on Fedora 14 32/64 bit
 #build LIBXML2 $( [ "$MSYSTEM" = "MINGW32" ] && echo "--without-threads")
-build LIBXML2 --without-threads
-#build LIBXML2 --with-minimum --with-output
+# Also when xbuilding on some 'used' Fedora 14 32/64 bit
+#
+# However:
+#build LIBXML2 --without-threads
+# xcompile on Ubuntu: runxmlconf.c:271: undefined reference to `__imp__xmlLastError'
+#
+# NB configure will pickup host python and try to install support:
+# libtool: compile:  i686-pc-mingw32-gcc -DHAVE_CONFIG_H -I. -I.. -I/usr/include/python2.7 -I../include -I../include -I../python -DWIN32 -g -O2 -pedantic -W -Wformat -Wunused -Wimplicit -Wreturn-type -Wswitch -Wcomment -Wtrigraphs -Wformat -Wchar-subscripts -Wuninitialized -Wparentheses -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -Winline -Wredundant-decls -MT libxml.lo -MD -MP -MF .deps/libxml.Tpo -c ./libxml.c  -DDLL_EXPORT -DPIC -o .libs/libxml.o
+#In file included from /usr/include/python2.7/Python.h:8:0,
+#                 from ./libxml_wrap.h:1,
+#                 from ./types.c:9:
+#/usr/include/python2.7/pyconfig.h:1:27: fatal error: bits/wordsize.h: No such file or directoryIn file included from /usr/include/python2.7/Python.h:8:0,
+
+# Including path to zlib
+CPPFLAGS="-I$incdir $CPPFLAGS" LDFLAGS="-L$libdir $LDFLAGS" \
+build LIBXML2 --with-minimum --with-output
+#build LIBXML2 $( [ "$MSYSTEM" = "MINGW32" ] && echo "--without-threads") --without-python
 
 ###############################################################################
 # DirectX - http://msdn.microsoft.com/en-us/directx/
@@ -1040,8 +1148,8 @@ build LIBVORBIS
 ###############################################################################
 # Install flac - http://flac.sourceforge.net/
 # For MythMusic
-# --disable-cpplibs 'cos examples/cpp/encode/file/main.cpp doesn't #include <string.h> for memcmp
 FLAC_DEBUGFLAG="--enable-debug"
+# --disable-cpplibs 'cos examples/cpp/encode/file/main.cpp doesn't #include <string.h> for memcmp
 # Need to set LD_LIBRARY_PATH so ld.so can find libogg when configure runs ogg test
 LD_LIBRARY_PATH="$( [ "$MYTHTARGET" = "Host" ] && echo "${libdir}:" )$LD_LIBRARY_PATH" \
 build FLAC --disable-cpplibs $( isAltivec || echo "--disable-altivec")
@@ -1056,8 +1164,8 @@ build LIBCDIO --disable-joliet
 # Install taglib - http://freshmeat.net/projects/taglib
 # For MythMusic
 TAGLIB_DEBUGFLAG="--enable-debug=yes"
-# Including path to zlib causes link to fail 'cos needs dll
-#CPPFLAGS="-I$incdir $CPPFLAGS" LDFLAGS="-L$libdir $LDFLAGS" \
+# Including path to zlib
+CPPFLAGS="-I$incdir $CPPFLAGS" LDFLAGS="-L$libdir $LDFLAGS" \
 build TAGLIB
 
 ###############################################################################
@@ -1106,8 +1214,15 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     MYSQLW_LIB="lib/opt"
     if [ ! -e "$stampinstall" ]; then
         cd "$bindir"
-        cp -p $MYTHWORK/$MYSQLW/scripts/mysql_config.pl mysql_config
-        chmod +x mysql_config || true
+        cat > mysql_config <<-END
+			#!/bin/sh
+			case "\$1" in
+				--include)       echo "-I$incdir/mysql" ;;
+				--libs|--libs_r) echo "-L$libdir -lmysql" ;;
+				--version)       echo "${MYSQLW:6:6}"
+			esac
+		END
+        chmod +x mysql_config
         cd "$incdir"
         ln -f -s $MYTHWORK/$MYSQLW/include/ mysql
         cd "$libdir"
@@ -1281,24 +1396,57 @@ dopatches "$name" || rm -f "$stampbuild" $stampconfig*
 if [ ! -e "$stampconfig.$debug" -o -n "${!compcfg}" -o ! -e Makefile ]; then
     rm -f $stampconfig*
     [ -n "$xprefix" ] && mkspecs
-    [ -e Makefile ] &&  echo "make confclean..." && $make confclean >/dev/null 2>&1 || true
+    if [ -e Makefile ]; then
+		make_uninstall || true
+		echo "make confclean..."
+		$make confclean >/dev/null 2>&1 || true
+	fi
+
+    # Common configure options
+    # Disable unused examples, demos and tools to speed up build
+    # Disable unused sripttools, declarative and multimedia to speed up build
+    # BUG Even though script is not used the header is ref'd by webkit
+    # Add -no-phonon or need directX9 header dsound.h on Windows
     args="-opensource -confirm-license \
         ${qtXplatform:+-xplatform $qtXplatform} \
         -$debug -fast -nomake examples -nomake demos -nomake tools \
-        -no-scripttools -no-declarative -no-phonon \
-        -no-sql-sqlite -no-sql-odbc -plugin-sql-mysql -I $incdir/mysql"
+        -no-scripttools -no-declarative -no-multimedia \
+        -no-phonon -no-sql-sqlite -no-sql-odbc -plugin-sql-mysql"
+
+    # BUG Adding -I $incdir breaks the native compilation of tools like rcc/moc
+    # used to cross build for Windows, which find the Win32 pthread.h before the
+    # native one. Therefore can't use our zlib dll
+    # TODO test this with native builds only
+    #[ -z "$xprefix" ] && args="$args -I $incdir -L $libdir"
+
     if [ "$MSYSTEM" = "MINGW32" ]; then
+        args="$args -I $incdir/mysql -L `pwd -W`/../$MYSQLW/lib/opt -l mysql"
         set -x
-        cmd /c "configure.exe $args -L `pwd -W`/../$MYSQLW/lib/opt -l mysql ${!compcfg}"
+        cmd /c "configure.exe $args ${!compcfg}"
         set +x
     else
+        if [ -x "$bindir/mysql_config" ]; then
+            args="$args -mysql_config $bindir/mysql_config"
+        elif [ "$MYTHTARGET" = "Windows" ]; then
+            args="$args -I $incdir/mysql -L $libdir"
+        else
+            args="$args -I $incdir/mysql -L $libdir/mysql"
+        fi
         # BUG: The mysql plugin refs mysqlclient in $libdir/mysql, which is added
         # by mysql_config to LFLAGS. However, at runtime ld.so also needs to find
         # it but Qt only sets rpath to $libdir so add an explicit rpath
         [ -z "$xprefix" ] && args="$args -R $libdir/mysql"
+
+        # Add -no-reduce-exports to prevent "undefined reference to `_inflate..." in zlib.h line 45
+        [ -n "$xprefix" ] && args="$args -no-reduce-exports"
+
+        # Add -no-iconv else build fails on Mandriva with mingw iconv installed
+        [ -n "$xprefix" ] && args="$args -no-iconv"
+
+        # Disable unused XmlPatterns to speed up build
+        args="$args -no-javascript-jit -no-xmlpatterns"
         set -x
-        ./configure -prefix $MYTHINSTALL $args -mysql_config $bindir/mysql_config \
-            -no-javascript-jit -no-reduce-exports ${!compcfg}
+        ./configure -prefix $MYTHINSTALL $args ${!compcfg}
         set +x 
     fi
     pausecont
@@ -1343,8 +1491,7 @@ if [ "$MYTHBRANCH" != $( gitbranch .) ]; then
 
     branch=`gitbranch "$MYTHDIR/mythtv"`}
     case "$branch" in
-        fixes/*) branch=${branch/fixes\//} ;;
-        *) ;;
+        fixes/*) branch=${branch#fixes/} ;;
     esac
 
     pushd mythtv >/dev/null
@@ -1484,11 +1631,22 @@ dopatches "$name${MYTHVER:+-$MYTHVER}" || rm -f "mythconfig.mak"
 [ "$reconfig" = "yes" ] && rm -f "mythconfig.mak"
 if [ ! -e "mythconfig.mak" ]; then
     [ -e Makefile ] && { make_uninstall; make_distclean; } || true
-    ./configure "--prefix=$MYTHINSTALL" --qmake="$MYTHWORK/$QT/bin/qmake"
+    ./configure "--prefix=$MYTHINSTALL" --qmake="$MYTHWORK/$QT/bin/qmake" $MYTHTHEMES_CFG
+    rm -f "$stampbuild"
 fi
-$make
-banner "Installing $name"
-$make -s install
+
+if [ ! -e "$stampbuild" ] ; then
+    $make
+    touch "$stampbuild"
+    rm -f "$stampinstall"
+fi
+
+if [ ! -e "$stampinstall" ]; then
+    banner "Installing $name"
+    $make -s install
+    touch "$stampinstall"
+fi
+
 popd >/dev/null
 
 ###############################################################################
@@ -1498,8 +1656,8 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     [ ! -e "$arc" ] && download "$url" || true
     [ ! -d "$name" -a -e "$arc" ] && unpack "$arc"
     if [ -d "$name" ]; then
-        pushd "$name" >/dev/null
         banner "Building $name"
+        pushd "$name" >/dev/null
         [ ! -e setup.exe ] && $make ${xprefix:+PREFIX=$xprefix-}
         popd >/dev/null
     fi
@@ -1510,6 +1668,9 @@ fi
 # Create the installation
 ###############################################################################
 mythlibs="myth mythdb mythfreemheg mythmetadata mythtv mythui mythupnp mythlivemedia mythhdhomerun"
+case "$MYTHVER" in
+    master|0.2[5-9]) mythlibs="$mythlibs mythbase" ;;
+esac
 ffmpeglibs="mythavcodec mythavcore mythavformat mythavutil mythswscale mythpostproc"
 xtralibs="xml2 freetype mp3lame dvdcss exif ogg vorbis vorbisenc tag cdio cdio_cdda cdio_paranoia visual-0.4"
 QTDLLS="QtCore QtGui QtNetwork QtOpenGL QtSql QtSvg QtWebKit QtXml Qt3Support"
@@ -1560,7 +1721,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     # Windows only libs
     ln -s $bindir/SDL.dll .
     ln -s $bindir/pthreadGC2.dll .
-    #ln -s $bindir/zlib1.dll .
+    ln -s $bindir/zlib1.dll .
     [ -r libdvdcss-2.dll ] && ln -s libdvdcss-2.dll libdvdcss.dll
 
     # QT
@@ -1645,9 +1806,10 @@ else
 
     # Special libs
     files="$files lib/libSDL*.so.@(?|??)"
+    files="$files lib/libudf.so.@(?|??)"
 
     # QT
-    for lib in $QTDLLS ; do
+    for lib in $QTDLLS QtDBus ; do
         files="$files lib/lib$lib.so.?"
     done
     files="$files plugins"
@@ -1673,14 +1835,14 @@ fi
 
 banner "Finished"
 
-echo "To run a myth program, such as mythfrontend, enter:"
+echo "To run a myth program, such as mythfrontend, execute:"
 if [ "$MSYSTEM" = "MINGW32" ]; then
-    echo "$windir/mythfrontend"
+    echo "${windir#$currdir/}/mythfrontend"
     echo ""
     echo "Persisent settings are stored in c:\Documents and Settings\[user]\.mythtv"
     echo "To use a different location prepend MYTHCONFDIR=<path>"
 elif [ "$MYTHTARGET" = "Windows" ]; then
-    echo "wine $windir/mythfrontend -p"
+    echo "wine ${windir#$currdir/}/mythfrontend -p"
     echo ""
     echo "Click 'Set configuration manually'"
     echo "On the page 'Database Configuration 2/2' set 'Use a custom identifier...'"
@@ -1689,7 +1851,7 @@ elif [ "$MYTHTARGET" = "Windows" ]; then
     echo "Persisent settings are stored in c:/users/[name]/.xmyth"
     echo "To use a different location prepend MYTHCONFDIR=z:<path>"
 else
-    echo "$bindir/mythfrontend"
+    echo "${bindir#$currdir/}/mythfrontend"
     echo ""
     echo "If the installtion is moved from $MYTHINSTALL then prepend:"
     echo "LD_LIBRARY_PATH=\"<path>/lib:<path>/lib/mysql\" QT_PLUGIN_PATH=\"<path>/plugins\""
@@ -1699,8 +1861,8 @@ else
 fi
 
 echo ""
-echo "To simplify setting up and running MythTV on Linux or Windows, get this script:"
+echo "To simplify setting up and running MythTV on Linux or Windows, try this script:"
 echo "wget http://www.softsystem.co.uk/download/mythtv/mythrun && chmod +x mythrun"
-echo "Run mythfrontend: ./mythrun fe"
-echo "Run mythbackend: ./mythrun be"
-echo "Run mythtv-setup: ./mythrun setup"
+echo "Run mythfrontend: ./mythrun fe [args]"
+echo "Run mythbackend: ./mythrun be [args]"
+echo "Run mythtv-setup: ./mythrun su [args]"
