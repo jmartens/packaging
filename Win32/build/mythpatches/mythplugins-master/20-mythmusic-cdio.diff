@@ -1,8 +1,8 @@
-Index: mythplugins/configure
-===================================================================
---- mythplugins/configure	(revision 27299)
-+++ mythplugins/configure	(working copy)
-@@ -118,9 +118,11 @@
+diff --git a/mythplugins/configure b/mythplugins/configure
+index 5788a40..9434cbb 100755
+--- mythplugins/configure
++++ mythplugins/configure
+@@ -118,9 +118,11 @@ sdl
  exif
  newexif
  dcraw
@@ -14,7 +14,7 @@ Index: mythplugins/configure
  
  
  prefix="/usr/local"
-@@ -174,6 +176,7 @@
+@@ -174,6 +176,7 @@ MythMusic related options:
    --enable-libvisual       enable libvisual visualizers [$libvisual]
    --enable-fftw            enable fftw visualizers [$fftw]
    --enable-sdl             use SDL for the synaesthesia output [$sdl]
@@ -22,30 +22,7 @@ Index: mythplugins/configure
  
  MythNews related options:
    --enable-mythnews        build the mythnews plugin [$news]
-@@ -503,7 +506,7 @@
-         cdaudio="yes"
-     fi
- 
--    if test "$cdaudio" = "no" -a "$targetos" != "Darwin"; then
-+    if test "$cdaudio" = "no" -a "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW"; then
-         echo "MythMusic requires libcdaudio."
-     fi
- 
-@@ -522,6 +525,13 @@
-         echo "MythMusic requires CDDA Paranoia."
-     fi
- 
-+    if test "$cdio" != "no" ; then
-+        cdio="no"
-+        if has_header cdio/cdio.h && has_library libcdio && has_library libcdio_cdda && has_library libcdio_paranoia ; then
-+            cdio="yes"
-+        fi
-+    fi
-+
-     mp3lame="no"
-     if has_header lame/lame.h && has_library libmp3lame ; then
-         mp3lame="yes"
-@@ -799,6 +809,15 @@
+@@ -799,6 +812,15 @@ if test "$music" = "yes" ; then
        echo "#undef  HAVE_PARANOIA" >> ./mythmusic/mythmusic/config.h
      fi
  
@@ -61,11 +38,11 @@ Index: mythplugins/configure
      if test "$opengl" = "yes" ; then
          echo "        OpenGL         support will be included in MythMusic"
          echo "#define OPENGL_SUPPORT 1" >> ./mythmusic/mythmusic/config.h
-Index: mythplugins/mythmusic/mythmusic/playbackbox.cpp
-===================================================================
---- mythplugins/mythmusic/mythmusic/playbackbox.cpp	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/playbackbox.cpp	(working copy)
-@@ -33,10 +33,6 @@
+diff --git a/mythplugins/mythmusic/mythmusic/playbackbox.cpp b/mythplugins/mythmusic/mythmusic/playbackbox.cpp
+index 9d19aaf..2537f27 100644
+--- mythplugins/mythmusic/mythmusic/playbackbox.cpp
++++ mythplugins/mythmusic/mythmusic/playbackbox.cpp
+@@ -33,10 +33,6 @@ using namespace std;
  #include "playlistcontainer.h"
  #include "search.h"
  
@@ -76,11 +53,11 @@ Index: mythplugins/mythmusic/mythmusic/playbackbox.cpp
  PlaybackBoxMusic::PlaybackBoxMusic(MythMainWindow *parent, QString window_name,
                                     QString theme_filename, const QString &dev, const char *name)
  
-Index: mythplugins/mythmusic/mythmusic/mythmusic.pro
-===================================================================
---- mythplugins/mythmusic/mythmusic/mythmusic.pro	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/mythmusic.pro	(working copy)
-@@ -9,7 +9,7 @@
+diff --git a/mythplugins/mythmusic/mythmusic/mythmusic.pro b/mythplugins/mythmusic/mythmusic/mythmusic.pro
+index 333dd6d..5ee9ca2 100644
+--- mythplugins/mythmusic/mythmusic/mythmusic.pro
++++ mythplugins/mythmusic/mythmusic/mythmusic.pro
+@@ -9,7 +9,7 @@ QT += xml sql opengl qt3support network
     error(Missing config.pro: please run the configure script)
  }
  
@@ -89,7 +66,7 @@ Index: mythplugins/mythmusic/mythmusic/mythmusic.pro
  TEMPLATE = lib
  CONFIG += plugin thread
  TARGET = mythmusic
-@@ -65,6 +65,18 @@
+@@ -65,6 +65,18 @@ SOURCES += playlistcontainer.cpp
  SOURCES += mythlistview-qt3.cpp mythlistbox-qt3.cpp
  SOURCES += musiccommon.cpp decoderhandler.cpp pls.cpp shoutcast.cpp
  
@@ -108,7 +85,7 @@ Index: mythplugins/mythmusic/mythmusic/mythmusic.pro
  macx {
      SOURCES -= cddecoder.cpp
      SOURCES += cddecoder-darwin.cpp
-@@ -73,13 +85,15 @@
+@@ -73,13 +85,15 @@ macx {
  }
  
  mingw {
@@ -128,10 +105,10 @@ Index: mythplugins/mythmusic/mythmusic/mythmusic.pro
      LIBS += -lwsock32
  }
  
-Index: mythplugins/mythmusic/mythmusic/cddecoder.h
-===================================================================
---- mythplugins/mythmusic/mythmusic/cddecoder.h	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/cddecoder.h	(working copy)
+diff --git a/mythplugins/mythmusic/mythmusic/cddecoder.h b/mythplugins/mythmusic/mythmusic/cddecoder.h
+index 454f913..6ad395e 100644
+--- mythplugins/mythmusic/mythmusic/cddecoder.h
++++ mythplugins/mythmusic/mythmusic/cddecoder.h
 @@ -9,11 +9,17 @@
  #include <vector>
  #endif
@@ -153,7 +130,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.h
  }
  #endif
  
-@@ -23,30 +29,38 @@
+@@ -23,30 +29,38 @@ class CdDecoder : public Decoder
  {
    public:
      CdDecoder(const QString &file, DecoderFactory *, QIODevice *, AudioOutput *);
@@ -181,15 +158,15 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.h
 -    Metadata *getMetadata(void);
 -    Metadata *getLastMetadata(void);
 +    Metadata *getLastMetadata();
- 
--    void commitMetadata(Metadata *mdata);
--    void      setDevice(const QString &dev)  { devicename = dev; }
++
 +#if CONFIG_DARWIN
 +    double lengthInSeconds();
 +#endif
 +    int getNumTracks();
 +    int getNumCDAudioTracks();
-+
+ 
+-    void commitMetadata(Metadata *mdata);
+-    void      setDevice(const QString &dev)  { devicename = dev; }
 +    void      setDevice(const QString &dev);
 +#ifndef HAVE_CDIO
 +    void      setDevice(const QString &dev)  { this->devicename = dev; }
@@ -204,7 +181,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.h
      void deinit();
  
      bool inited, user_stop;
-@@ -64,12 +78,15 @@
+@@ -64,12 +78,15 @@ class CdDecoder : public Decoder
      vector<int>        m_tracks;        ///< Start block offset of each track
      vector<Metadata*>  m_mData;         ///< After lookup, details of each trk
  #endif
@@ -223,7 +200,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.h
      bool finish;
      long freq, bitrate;
      int chan;
-@@ -78,12 +95,16 @@
+@@ -78,12 +95,16 @@ class CdDecoder : public Decoder
      int settracknum;
      int tracknum;
  
@@ -236,10 +213,10 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.h
 +#elif defined HAVE_PARANOIA
      cdrom_drive *device;
      cdrom_paranoia *paranoia;
-+    long int start, end, curpos;
- #endif
+-#endif
 -
--    long int start, end, curpos;
+     long int start, end, curpos;
++#endif
  };
  
  #endif
@@ -1741,10 +1718,10 @@ Index: mythplugins/mythmusic/mythmusic/cddb.cpp
 +    }
 +    return helloID;
 +}
-Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
-===================================================================
---- mythplugins/mythmusic/mythmusic/cdrip.cpp	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/cdrip.cpp	(working copy)
+diff --git a/mythplugins/mythmusic/mythmusic/cdrip.cpp b/mythplugins/mythmusic/mythmusic/cdrip.cpp
+index 919bbce..9cf0fdb 100644
+--- mythplugins/mythmusic/mythmusic/cdrip.cpp
++++ mythplugins/mythmusic/mythmusic/cdrip.cpp
 @@ -6,15 +6,21 @@
  #include <sys/types.h>
  #include <fcntl.h>
@@ -1773,7 +1750,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
  
  // C++ includes
  #include <iostream>
-@@ -54,6 +60,17 @@
+@@ -59,6 +65,17 @@ using namespace std;
  #include "genres.h"
  #include "editmetadata.h"
  
@@ -1791,7 +1768,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
  QEvent::Type RipStatusEvent::kTrackTextEvent =
      (QEvent::Type) QEvent::registerEventType();
  QEvent::Type RipStatusEvent::kOverallTextEvent =
-@@ -103,15 +120,23 @@
+@@ -108,15 +125,23 @@ void CDEjectorThread::run()
  
  static long int getSectorCount (QString &cddevice, int tracknum)
  {
@@ -1816,7 +1793,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
          cdda_close(device);
          return -1;
      }
-@@ -125,6 +150,8 @@
+@@ -130,6 +155,8 @@ static long int getSectorCount (QString &cddevice, int tracknum)
          cdda_close(device);
          return end - start + 1;
      }
@@ -1825,7 +1802,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
  
      cdda_close(device);
  #else
-@@ -133,10 +160,16 @@
+@@ -138,10 +165,16 @@ static long int getSectorCount (QString &cddevice, int tracknum)
      return 0;
  }
  
@@ -1842,7 +1819,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
  
  CDRipperThread::CDRipperThread(RipStatus *parent,  QString device,
                                 QVector<RipTrack*> *tracks, int quality) :
-@@ -146,6 +179,10 @@
+@@ -151,6 +184,10 @@ CDRipperThread::CDRipperThread(RipStatus *parent,  QString device,
      m_totalSectorsDone(0), m_lastTrackPct(0),
      m_lastOverallPct(0)
  {
@@ -1853,23 +1830,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
  }
  
  CDRipperThread::~CDRipperThread(void)
-@@ -319,6 +356,7 @@
-         }
-     }
- 
-+#ifndef USING_MINGW
-     QString PostRipCDScript = gCoreContext->GetSetting("PostCDRipScript");
- 
-     if (!PostRipCDScript.isEmpty())
-@@ -338,14 +376,14 @@
-             _exit(1);
-         }
-     }
--
-+#endif
-     QApplication::postEvent(
-         m_parent, new RipStatusEvent(RipStatusEvent::kFinishedEvent, ""));
- }
+@@ -335,7 +372,7 @@ void CDRipperThread::run(void)
  
  int CDRipperThread::ripTrack(QString &cddevice, Encoder *encoder, int tracknum)
  {
@@ -1878,7 +1839,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
      QByteArray devname = cddevice.toAscii();
      cdrom_drive *device = cdda_identify(devname.constData(), 0, NULL);
  
-@@ -360,6 +398,9 @@
+@@ -350,6 +387,9 @@ int CDRipperThread::ripTrack(QString &cddevice, Encoder *encoder, int tracknum)
  
      if (cdda_open(device))
      {
@@ -1888,7 +1849,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
          cdda_close(device);
          return -1;
      }
-@@ -367,6 +408,8 @@
+@@ -357,6 +397,8 @@ int CDRipperThread::ripTrack(QString &cddevice, Encoder *encoder, int tracknum)
      cdda_verbose_set(device, CDDA_MESSAGE_FORGETIT, CDDA_MESSAGE_FORGETIT);
      long int start = cdda_track_firstsector(device, tracknum);
      long int end = cdda_track_lastsector(device, tracknum);
@@ -1897,7 +1858,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
  
      cdrom_paranoia *paranoia = paranoia_init(device);
      if (gCoreContext->GetSetting("ParanoiaLevel") == "full")
-@@ -746,7 +789,13 @@
+@@ -740,7 +782,13 @@ void Ripper::ScanFinished()
  
  void Ripper::scanCD(void)
  {
@@ -1912,7 +1873,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
      QByteArray devname = m_CDdevice.toAscii();
      int cdrom_fd = cd_init_device(const_cast<char*>(devname.constData()));
      VERBOSE(VB_MEDIA, "Ripper::scanCD() - dev:" + m_CDdevice);
-@@ -953,7 +1002,7 @@
+@@ -947,7 +995,7 @@ QString Ripper::filenameFromMetadata(Metadata *track, bool createDir)
          musicdir += "/" + directoryList[i];
          if (createDir)
          {
@@ -1921,7 +1882,7 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
              directoryQD.mkdir(musicdir);
              directoryQD.cd(musicdir);
          }
-@@ -1221,10 +1270,15 @@
+@@ -1208,10 +1256,15 @@ void Ripper::EjectFinished()
  
  void Ripper::ejectCD()
  {
@@ -1938,11 +1899,40 @@ Index: mythplugins/mythmusic/mythmusic/cdrip.cpp
          QByteArray devname = m_CDdevice.toAscii();
          int cdrom_fd = cd_init_device(const_cast<char*>(devname.constData()));
          VERBOSE(VB_MEDIA, "Ripper::ejectCD() - dev " + m_CDdevice);
-Index: mythplugins/mythmusic/mythmusic/decoder.cpp
-===================================================================
---- mythplugins/mythmusic/mythmusic/decoder.cpp	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/decoder.cpp	(working copy)
-@@ -181,9 +181,7 @@
+diff --git a/mythplugins/mythmusic/mythmusic/databasebox.cpp b/mythplugins/mythmusic/mythmusic/databasebox.cpp
+index 8a4df93..90fdef3 100644
+--- mythplugins/mythmusic/mythmusic/databasebox.cpp
++++ mythplugins/mythmusic/mythmusic/databasebox.cpp
+@@ -29,9 +29,6 @@ using namespace std;
+ #include "cddecoder.h"
+ #include "playlistcontainer.h"
+ #include "musicplayer.h"
+-#ifndef USING_MINGW
+-#include "cddecoder.h"
+-#endif
+ 
+ DatabaseBox::DatabaseBox(MythMainWindow *parent,
+                          const QString dev, const QString &window_name,
+@@ -1275,7 +1272,6 @@ ReadCDThread::ReadCDThread(const QString &dev)
+ 
+ void ReadCDThread::run()
+ {
+-#ifndef USING_MINGW
+     // lock all_music and cd_status_changed while running thread
+     QMutexLocker locker(getLock());
+ 
+@@ -1363,6 +1359,5 @@ void ReadCDThread::run()
+     }
+ 
+     delete decoder;
+-#endif // USING_MINGW
+ }
+ 
+diff --git a/mythplugins/mythmusic/mythmusic/decoder.cpp b/mythplugins/mythmusic/mythmusic/decoder.cpp
+index d101c59..6a70d51 100644
+--- mythplugins/mythmusic/mythmusic/decoder.cpp
++++ mythplugins/mythmusic/mythmusic/decoder.cpp
+@@ -206,9 +206,7 @@ static void checkFactories()
      {
          factories = new QList<DecoderFactory*>;
  
@@ -2051,36 +2041,7 @@ Index: mythplugins/mythmusic/mythmusic/cddb.h
 +};
 +
 +#endif //ndef CDDB_H_
-Index: mythplugins/mythmusic/mythmusic/databasebox.cpp
-===================================================================
---- mythplugins/mythmusic/mythmusic/databasebox.cpp	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/databasebox.cpp	(working copy)
-@@ -27,9 +27,6 @@
- #include "cddecoder.h"
- #include "playlistcontainer.h"
- #include "musicplayer.h"
--#ifndef USING_MINGW
--#include "cddecoder.h"
--#endif
- 
- DatabaseBox::DatabaseBox(MythMainWindow *parent,
-                          const QString dev, const QString &window_name,
-@@ -1276,7 +1273,6 @@
- 
- void ReadCDThread::run()
- {
--#ifndef USING_MINGW
-     // lock all_music and cd_status_changed while running thread
-     QMutexLocker locker(getLock());
- 
-@@ -1364,6 +1360,5 @@
-     }
- 
-     delete decoder;
--#endif // USING_MINGW
- }
- 
-diff --git mythplugins/mythmusic/mythmusic/main.cpp mythplugins/mythmusic/mythmusic/main.cpp
+diff --git a/mythplugins/mythmusic/mythmusic/main.cpp b/mythplugins/mythmusic/mythmusic/main.cpp
 index 3665fbc..9024334 100644
 --- mythplugins/mythmusic/mythmusic/main.cpp
 +++ mythplugins/mythmusic/mythmusic/main.cpp
@@ -2122,11 +2083,11 @@ index 3665fbc..9024334 100644
      MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
  
      Ripper *rip = new Ripper(mainStack, chooseCD());
-Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
-===================================================================
---- mythplugins/mythmusic/mythmusic/cddecoder.cpp	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/cddecoder.cpp	(working copy)
-@@ -37,7 +37,8 @@
+diff --git a/mythplugins/mythmusic/mythmusic/cddecoder.cpp b/mythplugins/mythmusic/mythmusic/cddecoder.cpp
+index b539297..7131bff 100644
+--- mythplugins/mythmusic/mythmusic/cddecoder.cpp
++++ mythplugins/mythmusic/mythmusic/cddecoder.cpp
+@@ -37,7 +37,8 @@ CdDecoder::CdDecoder(const QString &file, DecoderFactory *d, QIODevice *i,
      m_lastTrack(0),  m_leadout(0),
      m_lengthInSecs(0.0)
  #endif
@@ -2136,7 +2097,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      output_at(0),    bks(0),
      bksFrames(0),    decodeBytes(0),
      finish(false),
-@@ -45,7 +46,7 @@
+@@ -45,7 +46,7 @@ CdDecoder::CdDecoder(const QString &file, DecoderFactory *d, QIODevice *i,
      chan(0),
      totalTime(0.0),  seekTime(-1.0),
      settracknum(-1), tracknum(0),
@@ -2145,7 +2106,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      device(NULL),    paranoia(NULL),
  #endif
      start(0),        end(0),
-@@ -85,7 +86,8 @@
+@@ -85,7 +86,8 @@ bool CdDecoder::initialize()
  {
      inited = user_stop = finish = FALSE;
      freq = bitrate = 0;
@@ -2155,7 +2116,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      seekTime = -1.0;
  
      if (output())
-@@ -96,6 +98,7 @@
+@@ -96,6 +98,7 @@ bool CdDecoder::initialize()
      filename = ((QFile *)input())->fileName();
      tracknum = filename.section('.', 0, 0).toUInt();
  
@@ -2163,7 +2124,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      QByteArray devname = devicename.toAscii();
      device = cdda_identify(devname.constData(), 0, NULL);
      if (!device)
-@@ -148,6 +151,9 @@
+@@ -148,6 +151,9 @@ bool CdDecoder::initialize()
      setCDSpeed(2);
      inited = TRUE;
      return TRUE;
@@ -2173,7 +2134,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
  }
  
  void CdDecoder::seek(double pos)
-@@ -159,6 +165,7 @@
+@@ -159,6 +165,7 @@ void CdDecoder::seek(double pos)
  
  void CdDecoder::deinit()
  {
@@ -2181,7 +2142,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      setCDSpeed(-1);
      if (paranoia)
          paranoia_free(paranoia);
-@@ -171,18 +178,22 @@
+@@ -171,18 +178,22 @@ void CdDecoder::deinit()
  
      device = NULL;
      paranoia = NULL;
@@ -2205,7 +2166,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
  
  void CdDecoder::run()
  {
-@@ -205,7 +216,9 @@
+@@ -205,7 +216,9 @@ void CdDecoder::run()
          if (seekTime >= 0.0)
          {
              curpos = (int)(((seekTime * 44100) / CD_FRAMESAMPLES) + start);
@@ -2215,7 +2176,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
              output_at = 0;
              seekTime = -1.0;
          }
-@@ -219,10 +232,12 @@
+@@ -219,10 +232,12 @@ void CdDecoder::run()
  
                  if (curpos <= end)
                  {
@@ -2228,7 +2189,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
  
                      output_at += CD_FRAMESIZE_RAW;
                  }
-@@ -286,6 +301,7 @@
+@@ -286,6 +301,7 @@ void CdDecoder::setCDSpeed(int speed)
  
  int CdDecoder::getNumTracks(void)
  {
@@ -2236,7 +2197,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      QByteArray devname = devicename.toAscii();
      int cd = cd_init_device(const_cast<char*>(devname.constData()));
  
-@@ -309,10 +325,14 @@
+@@ -309,10 +325,14 @@ int CdDecoder::getNumTracks(void)
      cd_finish(cd);
  
      return retval;
@@ -2251,7 +2212,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      QByteArray devname = devicename.toAscii();
      int cd = cd_init_device(const_cast<char*>(devname.constData()));
  
-@@ -343,6 +363,9 @@
+@@ -343,6 +363,9 @@ int CdDecoder::getNumCDAudioTracks(void)
      cd_finish(cd);
  
      return retval;
@@ -2261,7 +2222,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
  }
  
  Metadata* CdDecoder::getMetadata(int track)
-@@ -372,6 +395,7 @@
+@@ -372,6 +395,7 @@ Metadata *CdDecoder::getMetadata()
      QString artist, album, compilation_artist, title, genre;
      int year = 0, tracknum = 0, length = 0;
  
@@ -2269,7 +2230,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      QByteArray devname = devicename.toAscii();
      int cd = cd_init_device(const_cast<char*>(devname.constData()));
  
-@@ -466,15 +490,19 @@
+@@ -466,15 +490,19 @@ Metadata *CdDecoder::getMetadata()
      length = length < 0 ? 0 : length;
      length *= 1000;
  
@@ -2291,7 +2252,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
  static void set_cstring(char *dest, const char *src, size_t dest_buf_size)
  {
      if (dest_buf_size < 1)
-@@ -482,9 +510,11 @@
+@@ -482,9 +510,11 @@ static void set_cstring(char *dest, const char *src, size_t dest_buf_size)
      strncpy(dest, src, dest_buf_size - 1);
      dest[dest_buf_size - 1] = 0;
  }
@@ -2303,7 +2264,7 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
      QByteArray devname = devicename.toAscii();
      int cd = cd_init_device(const_cast<char*>(devname.constData()));
  
-@@ -566,6 +596,9 @@
+@@ -566,6 +596,9 @@ void CdDecoder::commitMetadata(Metadata *mdata)
      cddb_write_data(cd, &discdata);
  
      cd_finish(cd);
@@ -2313,11 +2274,11 @@ Index: mythplugins/mythmusic/mythmusic/cddecoder.cpp
  }
  
  bool CdDecoderFactory::supports(const QString &source) const
-Index: mythplugins/mythmusic/mythmusic/musiccommon.cpp
-===================================================================
---- mythplugins/mythmusic/mythmusic/musiccommon.cpp	(revision 27299)
-+++ mythplugins/mythmusic/mythmusic/musiccommon.cpp	(working copy)
-@@ -32,9 +32,7 @@
+diff --git a/mythplugins/mythmusic/mythmusic/musiccommon.cpp b/mythplugins/mythmusic/mythmusic/musiccommon.cpp
+index dc72f7a..4c8cf74 100644
+--- mythplugins/mythmusic/mythmusic/musiccommon.cpp
++++ mythplugins/mythmusic/mythmusic/musiccommon.cpp
+@@ -32,9 +32,7 @@ using namespace std;
  #include "search.h"
  #include "editmetadata.h"
  

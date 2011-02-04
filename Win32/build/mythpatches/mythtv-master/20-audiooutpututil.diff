@@ -1,0 +1,14 @@
+diff --git a/mythtv/libs/libmyth/audio/audiooutpututil.cpp b/mythtv/libs/libmyth/audio/audiooutpututil.cpp
+index 3a38bf8..d320885 100644
+--- mythtv/libs/libmyth/audio/audiooutpututil.cpp
++++ mythtv/libs/libmyth/audio/audiooutpututil.cpp
+@@ -12,7 +12,7 @@ using namespace std;
+ #include <libkern/OSByteOrder.h>
+ #define bswap_16 OSSwapInt16
+ #define bswap_32 OSSwapInt32
+-#else
++#elif HAVE_BIGENDIAN
+ #error No bswap functions defined
+ #endif
+ 
+

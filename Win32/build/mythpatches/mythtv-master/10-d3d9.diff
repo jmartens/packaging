@@ -1,8 +1,8 @@
-Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
-===================================================================
---- mythtv/libs/libmythui/mythrender_d3d9.cpp	(revision 27285)
-+++ mythtv/libs/libmythui/mythrender_d3d9.cpp	(working copy)
-@@ -149,8 +149,8 @@
+diff --git a/mythtv/libs/libmythui/mythrender_d3d9.cpp b/mythtv/libs/libmythui/mythrender_d3d9.cpp
+index 9afb06c..eacf76d 100644
+--- mythtv/libs/libmythui/mythrender_d3d9.cpp
++++ mythtv/libs/libmythui/mythrender_d3d9.cpp
+@@ -149,8 +149,8 @@ QRect D3D9Image::GetRect(void)
  MythRenderD3D9::MythRenderD3D9(void)
    : m_d3d(NULL), m_d3dDevice(NULL),
      m_adaptor_fmt(D3DFMT_UNKNOWN),
@@ -13,7 +13,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
      m_rect_vertexbuffer(NULL), m_default_surface(NULL), m_current_surface(NULL),
      m_lock(QMutex::Recursive),
      m_blend(true), m_multi_texturing(true), m_texture_vertices(true)
-@@ -196,6 +196,7 @@
+@@ -196,6 +196,7 @@ bool MythRenderD3D9::FormatSupported(D3DFORMAT surface, D3DFORMAT adaptor)
                                            adaptor, 0, D3DRTYPE_SURFACE, surface);
      if (SUCCEEDED(hr))
      {
@@ -21,7 +21,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
          hr = m_d3d->CheckDeviceFormatConversion(D3DADAPTER_DEFAULT,
                                                  D3DDEVTYPE_HAL, surface, adaptor);
          if (SUCCEEDED(hr))
-@@ -206,7 +207,6 @@
+@@ -206,7 +207,6 @@ bool MythRenderD3D9::FormatSupported(D3DFORMAT surface, D3DFORMAT adaptor)
  
  static const QString toString(D3DFORMAT fmt)
  {
@@ -29,7 +29,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
      switch (fmt)
      {
          case D3DFMT_A8:
-@@ -216,9 +216,8 @@
+@@ -216,9 +216,8 @@ static const QString toString(D3DFORMAT fmt)
          case D3DFMT_X8R8G8B8:
              return "X8R8G8B8";
          default:
@@ -40,7 +40,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
  }
  
  bool MythRenderD3D9::Create(QSize size, HWND window)
-@@ -228,7 +227,6 @@
+@@ -228,7 +227,6 @@ bool MythRenderD3D9::Create(QSize size, HWND window)
      typedef LPDIRECT3D9 (WINAPI *LPFND3DC)(UINT SDKVersion);
      static  HINSTANCE hD3DLib            = NULL;
      static  LPFND3DC  OurDirect3DCreate9 = NULL;
@@ -48,7 +48,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
  
      if (!hD3DLib)
      {
-@@ -256,12 +254,12 @@
+@@ -256,12 +254,12 @@ bool MythRenderD3D9::Create(QSize size, HWND window)
          return false;
      }
  
@@ -62,7 +62,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
      }
  
      D3DDISPLAYMODE d3ddm;
-@@ -271,28 +269,59 @@
+@@ -271,28 +269,59 @@ bool MythRenderD3D9::Create(QSize size, HWND window)
          return false;
      }
  
@@ -76,12 +76,13 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
 -        QString("Default Adaptor Format %1 - Hardware YV12 to RGB %2 ")
 -            .arg(toString(m_adaptor_fmt))
 -            .arg(default_ok ? "supported" : "unsupported"));
-+        QString("Default Adaptor Format %1.").arg(toString(m_adaptor_fmt)));
- 
+-
 -    // TODO - try alternative formats if necessary
 -    if (!FormatSupported(m_surface_fmt, m_adaptor_fmt))
 -        VERBOSE(VB_IMPORTANT, D3DERR + QString("%1 surface format not supported.")
 -                                          .arg(toString(m_surface_fmt)));
++        QString("Default Adaptor Format %1.").arg(toString(m_adaptor_fmt)));
++
 +    // Find the best h/w supported video surface format
 +    static const D3DFORMAT vfmt[] = {
 +        (D3DFORMAT)MAKEFOURCC('Y','V','1','2'),
@@ -105,11 +106,9 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
 +    if (D3DFMT_UNKNOWN != m_videosurface_fmt)
 +        VERBOSE(VB_GENERAL, D3DLOC +
 +            QString("Best Video Surface Format %1.").arg(toString(m_videosurface_fmt)));
-     else
--        VERBOSE(VB_GENERAL, D3DLOC + QString("Using %1 surface format.")
--                                          .arg(toString(m_surface_fmt)));
++    else
 +        VERBOSE(VB_IMPORTANT, D3DERR + "Failed to agree video surface format");
- 
++
 +    // Find the best backing surface format
 +    static const D3DFORMAT bfmt[] = {
 +        D3DFMT_A8R8G8B8,
@@ -127,9 +126,11 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
 +    if (D3DFMT_UNKNOWN != m_surface_fmt)
 +        VERBOSE(VB_GENERAL, D3DLOC +
 +            QString("Best surface format: %1.").arg(toString(m_surface_fmt)));
-+    else
+     else
+-        VERBOSE(VB_GENERAL, D3DLOC + QString("Using %1 surface format.")
+-                                          .arg(toString(m_surface_fmt)));
 +        VERBOSE(VB_IMPORTANT, D3DERR + "Failed to agree surface format");
-+
+ 
      D3DPRESENT_PARAMETERS d3dpp;
      ZeroMemory(&d3dpp, sizeof(D3DPRESENT_PARAMETERS));
 -    d3dpp.BackBufferFormat       = m_adaptor_fmt;
@@ -137,7 +138,7 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
      d3dpp.hDeviceWindow          = window;
      d3dpp.Windowed               = TRUE;
      d3dpp.BackBufferWidth        = size.width();
-@@ -301,17 +330,25 @@
+@@ -301,16 +330,24 @@ bool MythRenderD3D9::Create(QSize size, HWND window)
      d3dpp.MultiSampleType        = D3DMULTISAMPLE_NONE;
      d3dpp.SwapEffect             = D3DSWAPEFFECT_DISCARD;
      d3dpp.Flags                  = D3DPRESENTFLAG_VIDEO;
@@ -155,17 +156,16 @@ Index: mythtv/libs/libmythui/mythrender_d3d9.cpp
      }
 +    VERBOSE(VB_GENERAL, D3DLOC + QString("Device backbuffer format: %1.")
 +                                      .arg(toString(d3dpp.BackBufferFormat)));
- 
++
 +    if (D3DFMT_UNKNOWN == m_videosurface_fmt)
 +        m_videosurface_fmt = d3dpp.BackBufferFormat;
 +
 +    if (D3DFMT_UNKNOWN == m_surface_fmt)
 +        m_surface_fmt = d3dpp.BackBufferFormat;
-+
+ 
      VERBOSE(VB_GENERAL, D3DLOC +
                 QString("Hardware YV12 to RGB conversion %1.")
-                .arg(m_videosurface_fmt != (D3DFORMAT)MAKEFOURCC('Y','V','1','2') ?
-@@ -742,22 +779,24 @@
+@@ -742,22 +779,24 @@ bool MythRenderD3D9::UpdateSurface(IDirect3DSurface9 *surface,
          return false;
  
      D3DFORMAT format = m_surfaces[surface].m_fmt;

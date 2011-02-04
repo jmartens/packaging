@@ -1,0 +1,13 @@
+diff --git a/mythtv/libs/libmythtv/ringbuffer.cpp b/mythtv/libs/libmythtv/ringbuffer.cpp
+index 56e3ed5..e58d320 100644
+--- mythtv/libs/libmythtv/ringbuffer.cpp
++++ mythtv/libs/libmythtv/ringbuffer.cpp
+@@ -249,8 +249,6 @@ RingBuffer::~RingBuffer(void)
+         delete [] readAheadBuffer;
+         readAheadBuffer = NULL;
+     }
+-
+-    rwlock.unlock();
+ }
+ 
+ /** \fn RingBuffer::Reset(bool, bool, bool)

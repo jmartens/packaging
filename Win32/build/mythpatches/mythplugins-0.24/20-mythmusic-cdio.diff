@@ -22,17 +22,8 @@ Index: mythplugins/configure
  
  MythNews related options:
    --enable-mythnews        build the mythnews plugin [$news]
-@@ -503,7 +506,7 @@
-         cdaudio="yes"
-     fi
- 
--    if test "$cdaudio" = "no" -a "$targetos" != "Darwin"; then
-+    if test "$cdaudio" = "no" -a "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW"; then
-         echo "MythMusic requires libcdaudio."
-     fi
- 
-@@ -522,6 +525,13 @@
-         echo "MythMusic requires CDDA Paranoia."
+@@ -498,12 +504,19 @@ if test "$music" != "no" ; then
+         echo "MythMusic requires FLAC."
      fi
  
 +    if test "$cdio" != "no" ; then
@@ -42,9 +33,34 @@ Index: mythplugins/configure
 +        fi
 +    fi
 +
-     mp3lame="no"
-     if has_header lame/lame.h && has_library libmp3lame ; then
-         mp3lame="yes"
+     cdaudio="no"
+     if has_header cdaudio.h && has_library libcdaudio ; then
+         cdaudio="yes"
+     fi
+ 
+-    if test "$cdaudio" = "no" -a "$targetos" != "Darwin"; then
++    if test "$cdaudio" = "no" -a "cdio" = "no" -a "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW"; then
+         echo "MythMusic requires libcdaudio."
+     fi
+ 
+@@ -517,7 +530,7 @@ if test "$music" != "no" ; then
+         fi
+     fi
+ 
+-    if test "$paranoia" = "no" -a "$targetos" != "Darwin" -a \
++    if test "$paranoia" = "no" -a "cdio" = "no" -a "$targetos" != "Darwin" -a \
+                                   "`echo ${targetos} | cut -c1-5`" != "MINGW"; then
+         echo "MythMusic requires CDDA Paranoia."
+     fi
+@@ -544,7 +557,7 @@ if test "$music" != "no" ; then
+         echo "MythMusic requires taglib 1.5 or later."
+     fi
+ 
+-    if test "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW" ; then
++    if test "cdio" = "no" -a "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW" ; then
+         if test "$cdaudio" = "no" -o "$paranoia" = "no" ; then
+             cdlibs="no"
+         fi
 @@ -799,6 +809,15 @@
        echo "#undef  HAVE_PARANOIA" >> ./mythmusic/mythmusic/config.h
      fi
