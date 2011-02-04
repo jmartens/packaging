@@ -1,0 +1,107 @@
+Index: mythtv/libs/libmythtv/mythiowrapper.h
+===================================================================
+--- mythtv/libs/libmythtv/mythiowrapper.h	(revision 27299)
++++ mythtv/libs/libmythtv/mythiowrapper.h	(working copy)
+@@ -11,8 +11,13 @@
+ int     mythfile_check(int fileID);
+ int     mythfile_open(const char *pathname, int flags);
+ int     mythfile_close(int fileID);
++#ifdef USING_MINGW
++off64_t mythfile_seek(int fileID, off64_t offset, int whence);
++off64_t mythfile_tell(int fileID);
++#else
+ off_t   mythfile_seek(int fileID, off_t offset, int whence);
+ off_t   mythfile_tell(int fileID);
++#endif
+ ssize_t mythfile_read(int fileID, void *buf, size_t count);
+ ssize_t mythfile_write(int fileID, void *buf, size_t count);
+ int     mythfile_stat(const char *path, struct stat *buf);
+Index: mythtv/libs/libmythtv/mythiowrapper.cpp
+===================================================================
+--- mythtv/libs/libmythtv/mythiowrapper.cpp	(revision 27299)
++++ mythtv/libs/libmythtv/mythiowrapper.cpp	(working copy)
+@@ -96,7 +96,7 @@
+         return -1;
+ 
+     if (S_ISDIR( fileinfo.st_mode )) // libmythdvdnav tries to open() a dir
+-        return -1;
++        return errno = EISDIR, -1;
+ 
+     int fileID = -1;
+     if (strncmp(pathname, "myth://", 7))
+@@ -191,6 +191,12 @@
+     return result;
+ }
+ 
++#ifdef USING_MINGW
++#   undef  lseek
++#   define lseek  _lseeki64
++#   undef  off_t
++#   define off_t off64_t
++#endif
+ off_t mythfile_seek(int fileID, off_t offset, int whence)
+ {
+     off_t result = -1;
+@@ -204,11 +210,7 @@
+     else if (m_remotefiles.contains(fileID))
+         result = m_remotefiles[fileID]->Seek(offset, whence);
+     else if (m_localfiles.contains(fileID))
+-#ifdef USING_MINGW
+-        result = lseek64(m_localfiles[fileID], offset, whence);
+-#else
+         result = lseek(m_localfiles[fileID], offset, whence);
+-#endif
+     m_fileWrapperLock.unlock();
+ 
+     return result;
+@@ -226,15 +228,15 @@
+     else if (m_remotefiles.contains(fileID))
+         result = m_remotefiles[fileID]->Seek(0, SEEK_CUR);
+     else if (m_localfiles.contains(fileID))
+-#ifdef USING_MINGW
+-        result = lseek64(m_localfiles[fileID], 0, SEEK_CUR);
+-#else
+         result = lseek(m_localfiles[fileID], 0, SEEK_CUR);
+-#endif
+     m_fileWrapperLock.unlock();
+ 
+     return result;
+ }
++#ifdef USING_MINGW
++#   undef  lseek
++#   undef  off_t
++#endif
+ 
+ ssize_t mythfile_read(int fileID, void *buf, size_t count)
+ {
+Index: mythtv/libs/libmythmetadata/videoutils.cpp
+===================================================================
+--- mythtv/libs/libmythmetadata/videoutils.cpp	(revision 27299)
++++ mythtv/libs/libmythmetadata/videoutils.cpp	(working copy)
+@@ -74,8 +74,13 @@
+ 
+     if (host.isEmpty())
+     {
++#ifdef WIN32
+         QStringList tmp3 = gCoreContext->GetSetting("VideoStartupDir",
++                    DEFAULT_VIDEOSTARTUP_DIR).split(";", QString::SkipEmptyParts);
++#else
++        QStringList tmp3 = gCoreContext->GetSetting("VideoStartupDir",
+                     DEFAULT_VIDEOSTARTUP_DIR).split(":", QString::SkipEmptyParts);
++#endif
+         for (QStringList::iterator p = tmp3.begin(); p != tmp3.end(); ++p)
+         {
+             bool matches = false;
+Index: mythtv/libs/libmythtv/RingBuffer.cpp
+===================================================================
+--- mythtv/libs/libmythtv/RingBuffer.cpp	(revision 27299)
++++ mythtv/libs/libmythtv/RingBuffer.cpp	(working copy)
+@@ -358,6 +358,8 @@
+             filename.remove(0,5);              //             e.g. "dvd://dev/sda"
+         else if (filename.left(5) == "dvd:/")  // Less correct URI "dvd:" + path
+             filename.remove(0,4);              //             e.g. "dvd:/videos/ET"
++        else if (filename.left(4) == "dvd:")   // Win32 URI "dvd:" + abs path
++            filename.remove(0,4);              //             e.g. "dvd:D:\"
+ 
+         if (QFile::exists(filename) || filename.startsWith("myth://"))
+             VERBOSE(VB_PLAYBACK, "OpenFile() trying DVD at " + filename);
