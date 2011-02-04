@@ -57,6 +57,45 @@ Index: mythplugins/configure
          fi
      fi
  fi
+@@ -498,12 +504,19 @@ if test "$music" != "no" ; then
+         echo "MythMusic requires FLAC."
+     fi
+ 
++    if test "$cdio" != "no" ; then
++        cdio="no"
++        if has_header cdio/cdio.h && has_library libcdio && has_library libcdio_cdda && has_library libcdio_paranoia ; then
++            cdio="yes"
++        fi
++    fi
++
+     cdaudio="no"
+     if has_header cdaudio.h && has_library libcdaudio ; then
+         cdaudio="yes"
+     fi
+ 
+-    if test "$cdaudio" = "no" -a "$targetos" != "Darwin"; then
++    if test "$cdaudio" = "no" -a "cdio" = "no" -a "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW"; then
+         echo "MythMusic requires libcdaudio."
+     fi
+ 
+@@ -517,7 +530,7 @@ if test "$music" != "no" ; then
+         fi
+     fi
+ 
+-    if test "$paranoia" = "no" -a "$targetos" != "Darwin" -a \
++    if test "$paranoia" = "no" -a "cdio" = "no" -a "$targetos" != "Darwin" -a \
+                                   "`echo ${targetos} | cut -c1-5`" != "MINGW"; then
+         echo "MythMusic requires CDDA Paranoia."
+     fi
+@@ -544,7 +557,7 @@ if test "$music" != "no" ; then
+         echo "MythMusic requires taglib 1.5 or later."
+     fi
+ 
+-    if test "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW" ; then
++    if test "cdio" = "no" -a "$targetos" != "Darwin" -a "`echo ${targetos} | cut -c1-5`" != "MINGW" ; then
+         if test "$cdaudio" = "no" -o "$paranoia" = "no" ; then
+             cdlibs="no"
+         fi
 @@ -585,13 +587,13 @@
  ###########################################################
  

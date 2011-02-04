@@ -1,0 +1,18 @@
+Index: mythtv/bindings/python/Makefile
+===================================================================
+--- mythtv/bindings/python/Makefile	(revision 27299)
++++ mythtv/bindings/python/Makefile	(working copy)
+@@ -5,11 +5,11 @@
+ endif
+ 
+ REAL_PREFIX = $(PREFIX)
+-ifneq ($(PREFIX:/=), /usr)
++#ifneq ($(PREFIX:/=), /usr)
+ 	ifneq ($(PREFIX:/=), /usr/local)
+ 		PREFIX_FLAGS=--prefix="$(PREFIX)"
+ 	endif
+-endif
++#endif
+ 
+ all: python_build
+ 
