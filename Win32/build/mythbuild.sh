@@ -133,6 +133,18 @@ else
     : ${MYTHINSTALL:="$MYTHDIR/mythinstall"}
 fi
 
+# Default parameters
+MYTHTARGET=""
+MYTHBUILD=""
+MYTHBRANCH=""
+makeflags=""
+makejobs=""
+readtimeout=60
+logging="no"
+unpatch="no"
+cleanbuild="no"
+reconfig="no"
+
 
 ###############################################################
 # Parse the command line
@@ -150,6 +162,7 @@ function myhelp() {
     echo "  -l          Save mythbuild.log"
     echo "  -j n        Max number of make jobs [cpus+1]"
     echo "  -s          Silent make"
+    echo "  -t <n>      Set default timeout after configure"
     echo "  -C          Force a clean re-build"
     echo "  -R          Reverse patches applied to mythtv & mythplugins"
     echo "  -h          Display this help and exit"
@@ -168,26 +181,29 @@ function myhelp() {
     echo "MYSQL_DEBUG   MYSQL debug build (yes|no|auto) [$MYSQL_DEBUG]"
 }
 function version() {
-    echo "$myname version 0.2"
+    echo "$myname version 0.3"
 }
 function die() {
-    echo $@ >&2
+    echo "" >&2
+    echo -e "ERROR - $@" >&2
     exit 1
 }
 
 # Options
-while getopts ":b:dj:lsp:rhvCHWR" opt
+while getopts ":b:dj:lst:p:rhvCHWR" opt
 do
     case "$opt" in
         b) [ "${OPTARG:0:1}" = "-" ] && die "Invalid branch tag: $OPTARG"
             MYTHBRANCH=$OPTARG ;;
         d) MYTHBUILD="debug" ;;
         r) MYTHBUILD="release" ;;
-        j) [ $OPTARG \< 0 -o $OPTARG \> 99 ] && die "Invalid number: $OPTARG"
-            [ $OPTARG -lt 1 ] && die "Invalid make jobs: $OPTARG"
+        j) [ $OPTARG -lt 0 -o $OPTARG -gt 99 ] && die "Invalid number of jobs: $OPTARG"
+           [ $OPTARG -lt 1 ] && die "Invalid make jobs: $OPTARG"
             makejobs=$OPTARG ;;
         p) [ -d "$OPTARG" ] && MYTHINSTALL=$OPTARG || die "No such directory: $OPTARG" ;;
         s) makeflags="-s" ;;
+        t) [ $OPTARG \< 0 -o $OPTARG -gt 999 ] && die "Invalid timeout: $OPTARG"
+            readtimeout=$OPTARG ;;
         l) logging="yes" ;;
         C) cleanbuild="yes" ;;
         H) MYTHTARGET="Host" ;;
@@ -225,7 +241,7 @@ function ftpget() {
     local host path filename
     case "$1" in
         ftp://*) ;;
-        *) die "ERROR: Not an FTP URL - $1" ;;
+        *) die "Not an FTP URL: $1" ;;
     esac
     path=`dirname "${1#ftp://}"`
     host=${path%%/*}
@@ -251,6 +267,8 @@ function pause() {
     echo ""
     echo "*********************************************************************"
     if [ $1 -eq 0 ]; then
+        :
+    elif [ $1 -lt 0 ]; then
         read -p "$2" || echo ""
     else
         for (( seconds=$1 ; seconds > 0 ; --seconds )) do
@@ -270,7 +288,7 @@ function pausecont() {
     	local pkg=`basename "$PWD"`
         msg="Press [Return] to make ${pkg:0:26} or [Control-C] to abort "
     fi
-    pause ${1:-60} "$msg"
+    pause ${1:-$readtimeout} "$msg"
 }
 
 # Display a banner
@@ -291,7 +309,7 @@ function unpack() {
         *.tar.gz) tar -zxf $@ ;;
         *.tar.bz2) tar -jxf $@ ;;
         *.zip) unzip -a -q $@ ;;
-        *) die "ERROR: Unknown archive type $1" ;;
+        *) die "Unknown archive type: $1" ;;
     esac
 }
 
@@ -369,7 +387,7 @@ function isdebug() {
         y|yes|Y|YES) return 0 ;;
         n|no|N|NO) return 1 ;;
         "") return 2 ;;
-        *) die "Invalid $tag=$dbg" ;;
+        *) die "Invalid debug value: $tag=$dbg" ;;
     esac
 }
 
@@ -427,7 +445,7 @@ case "$MYTHBUILD" in
         fi
     ;;
     debug|release|profile) ;;
-    *) die "Invalid MYTHBUILD=$MYTHBUILD" ;;
+    *) die "Invalid MYTHBUILD: $MYTHBUILD" ;;
 esac
 
 
@@ -446,7 +464,6 @@ readonly stamptarget="$MYTHWORK/target"
 if [ "$MSYSTEM" = "MINGW32" ]; then
     # Native Windows
     xprefix=""
-    bprefix=""
     MYTHTARGET="Windows"
 else
     if [ -z "$MYTHTARGET" ]; then
@@ -462,22 +479,42 @@ else
                 xprefix="i586-pc-mingw32"
             elif which i686-pc-mingw32-gcc >/dev/null 2>&1 ; then
                 xprefix="i686-pc-mingw32"
-            elif xcc=`locate "/usr/bin/i*mingw32*-gcc"` ; then
+            elif xcc=`locate "/usr/bin/i*mingw32*-gcc" 2>/dev/null` ; then
                 xprefix=`basename "${xcc%-gcc}"`
             else
-                echo "ERROR: need mingw for cross compiling to Windows."
-                echo "Try: sudo apt-get install mingw32"
-                exit 1
+                die "mingw is required for cross compiling to Windows.\n"\
+                    "Try: sudo apt-get install mingw32\n"\
+                    "Or: sudo yum install mingw32-gcc.i686 mingw32-g++.i686"
             fi
         fi
-        bprefix=`gcc -dumpmachine`
         ;;
     Host|host) # Native build
         MYTHTARGET="Host"
         xprefix=""
-        bprefix=""
         ;;
     *) die "Unsupported target system: $MYTHTARGET" ;;
+    esac
+fi
+
+
+# Determine host type
+if [ "$MSYSTEM" = "MINGW32" -o "$MYTHTARGET" != "Windows" ]; then
+    bprefix=""
+else 
+    #bprefix=`gcc -dumpmachine`
+    machine=`uname -m`
+    kernel=`uname -s`
+    platform=`uname -i`
+    os=`uname -o`
+    case "$os" in
+        GNU*|Gnu*|gnu*) os="gnu" ;;
+    esac
+    case "$machine:$kernel:$platform:$os" in
+        i*86:Linux:*:*) bprefix="$machine-pc-linux-$os" ;;
+        x86_64:Linux:*:*) bprefix="$machine-unknown-linux-$os" ;;
+        ppc*:Linux:*:*) bprefix="$machine-$platform-linux-$os" ;;
+        *:Linux:*:*) bprefix="$machine-$platform-linux-$os" ;;
+        *) bprefix="$machine-$platform-$os" ;;
     esac
 fi
 
@@ -535,7 +572,7 @@ if [ ! -e "$stamptarget-$MYTHTARGET" ]; then
     rm -f $( installed '*')
     rm -f $stamptarget-*
     touch "$stamptarget-$MYTHTARGET"
-    readonly reconfig="yes"
+    reconfig="yes"
 fi
 
 
@@ -562,7 +599,7 @@ mkdir -p "$bindir" "$incdir" "$libdir"
 export PATH="$bindir:$PATH"
 
 # Check make
-! make --version >/dev/null && die "ERROR: make not found."
+! make --version >/dev/null 2>&1 && die "make is not installed."
 
 # Parallel make
 if [ -n "$NUMBER_OF_PROCESSORS" ]; then
@@ -579,14 +616,25 @@ else
     make="make $makeflags"
 fi
 
-# Check the C compiler exists
-if ! ${xprefix:+$xprefix-}gcc --version >/dev/null 2>&1 ; then
-    die "ERROR: The C compiler ${xprefix:+$xprefix-}gcc was not found."
+# Check the C/C++(cross) compilers exist
+! gcc --version >/dev/null 2>&1 && \
+    die "The C compiler gcc is not installed.\nTry sudo [apt-get|yum] install gcc"
+! g++ --version >/dev/null 2>&1 && \
+    die "The C++ compiler g++ is not installed.\nTry sudo [apt-get|yum] install g++"
+if [ -n "$xprefix" ]; then
+    ! ${xprefix}-gcc --version >/dev/null 2>&1 && \
+        die "The C cross compiler ${xprefix}-gcc is not installed."
+    ! ${xprefix}-g++ --version >/dev/null 2>&1 && \
+        die "The C++ cross compiler ${xprefix}-g++ is not installed."fi
 fi
 
+# Check patch
+! patch --version >/dev/null 2>&1 && \
+    die "patch is not installed.\nTry sudo [apt-get|yum] install patch"
+
 # Need wget http://www.gnu.org/software/wget/ to download everything
-if ! which wget >/dev/null 2>&1 ; then
-    [ "$MSYSTEM" != "MINGW32" ] && die "ERROR: wget not found"
+if ! wget --version >/dev/null 2>&1 ; then
+    [ "$MSYSTEM" != "MINGW32" ] && die "wget is not installed.\nTry sudo [apt-get|yum] install wget"
     # No wget so use ftp to download the wget source
     if ! which ftp >/dev/null 2>&1 ; then
         echo "There is no FTP client so you must manually install wget from:"
@@ -634,7 +682,7 @@ function patchmingw() {
     shift
 
     case "$xprefix" in
-        i586-mingw32msvc)
+        i586-mingw32msvc) # Ubuntu 10.04, 10.10
             path1="/usr/$xprefix/include"
             path2="/usr/lib/gcc/$xprefix/$gccversion/include"
         ;;
@@ -642,16 +690,18 @@ function patchmingw() {
             path1="/usr/$xprefix/sys-root/mingw/include"
             path2="/usr/lib/gcc/$xprefix/$gccversion/include"
         ;;
-        i686-pc-mingw32)
+        i686-pc-mingw32) # Fedora 14
             path1="/usr/$xprefix/sys-root/mingw/include"
-            path2="/usr/lib64/gcc/$xprefix/$gccversion/include"
+            [ -d "/usr/lib64/gcc/$xprefix/$gccversion/include" ] && \
+                path2="/usr/lib64/gcc/$xprefix/$gccversion/include" ||
+                path2="/usr/lib/gcc/$xprefix/$gccversion/include"
         ;;
         *mingw*)
             echo "WARNING: Guessing include paths"
             path1="/usr/${xprefix:+$xprefix/}include"
             path2="/usr/lib/gcc/${xprefix:+$xprefix/}$gccversion/include"
         ;;
-        *) die "patchmingw compiler not supported: $xprefix" ;;
+        *) die "Unable to patch this compiler: $xprefix" ;;
     esac
 
 	$dosudo patch -p0 $@ <<-EOF
@@ -679,33 +729,35 @@ function patchmingw() {
 	EOF
 }
 
-if [ "$MYTHTARGET" = "Windows" ]; then
-    # Check if the mingw <float.h> patch for Qt is required
-    if ! ${xprefix:+$xprefix-}gcc -c -x c++ - -o /dev/null >/dev/null 2>&1 <<-EOF
+# Check if the mingw <float.h> patch for Qt is required
+function check_float() {
+    ${xprefix:+$xprefix-}gcc -c -x c++ - -o /dev/null >/dev/null 2>&1 <<-EOF
 		#include <float.h>
 		int main(void){ _clear87(); _control87(0,0); return 0; }
-		EOF
-    then
-        echo ""
-        echo "The $xprefix <float.h> header must be patched to compile Qt."
-        while read -p "Do you wish to apply this patch (sudo is required) [Yn] " ; do
-            case "$REPLY" in
-                n|no|N) echo "NOTE: Qt may not build."; break ;;
-                y|yes|Y|"")
-                    patchmingw "" -s --dry-run && patchmingw "sudo" || \
-                        { echo ""; \
-                        echo "WARNING: The patch failed. Qt may not build."; \
-                        read -p "Press [Return] to continue or [Control-C] to abort "; }
-                    break
-                ;;
-            esac
-        done
-    fi
+	EOF
+}
+if [ "$MYTHTARGET" = "Windows" ] && ! check_float ; then
+    echo ""
+    echo "The $xprefix <float.h> header must be patched to compile Qt."
+    while read -p "Do you wish to apply this patch (sudo is required) [Yn] " ; do
+        case "$REPLY" in
+            n|no|N) echo "NOTE: Qt may not build."; break ;;
+            y|yes|Y|"")
+                patchmingw "" -s --dry-run && patchmingw "sudo" || true
+                if ! check_float ; then
+                    echo ""
+                    echo "WARNING: The patch failed. Qt may not build."
+                    read -p "Press [Return] to continue or [Control-C] to abort "
+                fi
+                break
+            ;;
+        esac
+    done
 fi
 
 # Need unzip for mysql
 if [ "$MYTHTARGET" = "Windows" ] && ! which unzip >/dev/null 2>&1 ; then
-    [ "$MSYSTEM" != "MINGW32" ] && die "ERROR: unzip not installed. Try: sudo apt-get install unzip"
+    [ "$MSYSTEM" != "MINGW32" ] && die "unzip is not installed.\nTry: sudo [apt-get|yum] install unzip"
     name=$WINUNZIP; url=$WINUNZIP_URL; arc=`basename "$url"`
     [ ! -e "$arc" ] && download "$url"
     banner "Installing $name..."
@@ -715,7 +767,7 @@ fi
 
 # Need zip to create install archive
 if [ "$MYTHTARGET" = "Windows" ] && ! which zip >/dev/null 2>&1 ; then
-    [ "$MSYSTEM" != "MINGW32" ] && die "ERROR: zip not installed. Try: sudo apt-get install zip"
+    [ "$MSYSTEM" != "MINGW32" ] && die "zip is not installed.\nTry: sudo [apt-get|yum] install zip"
     name=$WINZIP; url=$WINZIP_URL; arc=`basename "$url"`
     [ ! -e "$arc" ] && download "$url"
     banner "Installing $name..."
@@ -748,8 +800,8 @@ if [ "$MYTHTARGET" = "Windows" ] ; then
 fi
 
 # Need git to get myth sources
-if ! which git >/dev/null 2>&1 ; then
-    [ "$MSYSTEM" != "MINGW32" ] && die "ERROR: git not installed. Try: sudo apt-get install git-core";
+if ! git --version >/dev/null 2>&1 ; then
+    [ "$MSYSTEM" != "MINGW32" ] && die "git is not installed.\nTry: sudo [apt-get|yum] install git-core";
     gitexe="c:\Program Files\Git\bin\git.exe"
     gitexe32="C:\Program Files (x86)\Git\bin\git.exe"
     if [ ! -e "$gitexe" -a ! -e "$gitexe32" ]; then
@@ -844,7 +896,7 @@ function build() {
     dopatches "$name" || rm -f "$stampbuild" "$stampconfigtag"
 
     # Force configure if clean re-build
-    [ -n "$reconfig" ] && rm -f "$stampbuild" "$stampconfigtag"
+    [ "$reconfig" = "yes" ] && rm -f "$stampbuild" "$stampconfigtag"
 
     # configure
     if [ ! -e "$stampconfigtag" -o -n "${!libcfg}" -o ! -e "Makefile" ]; then
@@ -888,7 +940,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     [ ! -d "$name" ] && unpack "$arc"
     pushd "$name" >/dev/null
     dopatches "$name" || rm -f "$stampbuild"
-    [ -n "$reconfig" ] && rm -f "$stampbuild"
+    [ "$reconfig" = "yes" ] && rm -f "$stampbuild"
     if [ ! -e "$stampbuild" ] ; then
         $make -s -f GNUmakefile ${xprefix:+CROSS=$xprefix-} clean > /dev/null 2>&1
         $make -f GNUmakefile ${xprefix:+CROSS=$xprefix-} GC ${!compcfg}
@@ -918,7 +970,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     [ ! -d "$name" ] && unpack "$arc"
     pushd "$name" >/dev/null
     dopatches "$name" || rm -f "$stampbuild"
-    [ -n "$reconfig" ] && rm -f "$stampbuild"
+    [ "$reconfig" = "yes" ] && rm -f "$stampbuild"
     if [ ! -e "$stampbuild" ] ; then
         $make -f win32/Makefile.gcc clean
         $make -f win32/Makefile.gcc ${xprefix:+PREFIX=$xprefix-} SHARED_MODE=1
@@ -1225,7 +1277,7 @@ banner "Building $name ($debug)"
 [ ! -d "$name" ] && unpack "$arc"
 pushd "$name" >/dev/null
 dopatches "$name" || rm -f "$stampbuild" $stampconfig*
-[ -n "$reconfig" ] && rm -f "$stampbuild" $stampconfig*
+[ "$reconfig" = "yes" ] && rm -f "$stampbuild" $stampconfig*
 if [ ! -e "$stampconfig.$debug" -o -n "${!compcfg}" -o ! -e Makefile ]; then
     rm -f $stampconfig*
     [ -n "$xprefix" ] && mkspecs
@@ -1312,7 +1364,7 @@ if [ "$MYTHBRANCH" != $( gitbranch .) ]; then
         echo "WARNING: You requested to switch branches but have uncommited changes."
         echo "WARNING: Proceeding will discard those changes."
         read -p "Press [Return] to continue or [Control-C] to abort: "
-        #pause 60 "Press [Return] to continue or [Control-C] to abort: "
+        #pause $readtimeout "Press [Return] to continue or [Control-C] to abort: "
     fi
 
     git clean -f -d -x >/dev/null
@@ -1327,7 +1379,7 @@ mythtag=$( git describe)
 pushd "$name" >/dev/null
 banner "Building $name branch $MYTHBRANCH ($MYTHBUILD)"
 dopatches "$name${MYTHVER:+-$MYTHVER}" || rm -f $stampconfig*
-[ -n "$reconfig" ] && rm -f $stampconfig*
+[ "$reconfig" = "yes" ] && rm -f $stampconfig*
 if [ ! -e "$stampconfig${MYTHBUILD:+.$MYTHBUILD}" -o -n "$MYTHTV_CFG" \
         -o ! -e "config.h" -o ! -e "Makefile" ]; then
     rm -f $stampconfig*
@@ -1380,7 +1432,7 @@ name="mythplugins"
 pushd "$name" >/dev/null
 banner "Building $name branch $MYTHBRANCH ($MYTHBUILD)"
 dopatches "$name${MYTHVER:+-$MYTHVER}" || rm -f $stampconfig*
-[ -n "$reconfig" ] && rm -f $stampconfig*
+[ "$reconfig" = "yes" ] && rm -f $stampconfig*
 if [ ! -e "$stampconfig${MYTHBUILD:+.$MYTHBUILD}" -o -n "$MYTHPLUGINS_CFG" \
         -o ! -e "config.pro" -o ! -e "Makefile" ]; then
     rm -f $stampconfig*
@@ -1429,7 +1481,7 @@ fi
 
 banner "Building $name branch $MYTHBRANCH"
 dopatches "$name${MYTHVER:+-$MYTHVER}" || rm -f "mythconfig.mak"
-[ -n "$reconfig" ] && rm -f "mythconfig.mak"
+[ "$reconfig" = "yes" ] && rm -f "mythconfig.mak"
 if [ ! -e "mythconfig.mak" ]; then
     [ -e Makefile ] && { make_uninstall; make_distclean; } || true
     ./configure "--prefix=$MYTHINSTALL" --qmake="$MYTHWORK/$QT/bin/qmake"
