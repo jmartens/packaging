@@ -157,12 +157,13 @@ else
 fi
 [ $cpus -gt 1 ] && makejobs=`expr $cpus + 1` || makejobs=1
 makeflags=
+logfile="mythbuild.log"
 
 
 ###############################################################
 # Parse the command line
 ###############################################################
-readonly myname=`basename "$0"`
+readonly myname=$0
 readonly myargs="$@"
 readonly currdir=$PWD
 
@@ -177,7 +178,7 @@ function myhelp() {
     echo "  -I <path>     Install prefix [${MYTHINSTALL#$MYTHDIR/}]"
     echo "  -W           *Build for Windows (sticky)"
     echo "  -H            Build for Host (sticky)"
-    echo "  -l            Tee stdout and stderr to mythbuild.log"
+    echo "  -l            Tee stdout and stderr to $logfile"
     echo "  -j n          Number of parallel make jobs [$makejobs]"
     echo "  -s            Silent make"
     echo "  -t <n>        Timeout after configure [$readtimeout Seconds]"
@@ -205,7 +206,7 @@ function myhelp() {
     done
 }
 function version() {
-    echo "$myname version 0.3"
+    echo "Version 0.4, last modified `date -Rr $myname`"
 }
 function die() {
     echo "" >&2
@@ -342,8 +343,9 @@ function unpack() {
 # Apply patches to a component
 # $1= component name, $2... args to patch
 function dopatches() {
-    local d=$1 i ret=0 p patched
+    local d=$1 i ret=0 p patched dryrun
     shift
+    echo "$@" | grep -- --dry > /dev/null 2>&1 && dryrun="yes"
     for i in $MYTHDIR/$MYTHPATCHES/$d/*.diff ; do
         if [ -r "$i" ]; then
             p=`basename "$i" ".diff"`
@@ -351,7 +353,7 @@ function dopatches() {
             if [ ! -e "$patched" ]; then
                 echo "Applying patch $d/`basename $i`"
                 patch -p1 -i "$i" $@
-                [ "$1" != "--dry-run" ] && touch "$patched"
+                [ -z "$dryrun" ] && touch "$patched"
                 let ++ret
             fi
         fi
@@ -466,7 +468,7 @@ case "$MYTHBUILD" in
         else
             MYTHBUILD="release"
         fi
-    ;;
+        ;;
     debug|release|profile) ;;
     *) die "Invalid MYTHBUILD: $MYTHBUILD" ;;
 esac
@@ -476,9 +478,16 @@ esac
 : ${MYTHBRANCH:=`gitbranch "$MYTHDIR/mythtv"`}
 : ${MYTHBRANCH:="fixes/0.24"}
 case "$MYTHBRANCH" in
-    master) MYTHVER="master" ;;
-    fixes/*) MYTHVER=${MYTHBRANCH#fixes/} ;;
-    *) MYTHVER=${MYTHBRANCH//\//-} ;;
+    master)
+        MYTHVER="master"
+        ;;
+    fixes/0.25*|fixes/0.24*|fixes/0.23*)
+        MYTHVER=${MYTHBRANCH#fixes/}
+        ;;
+    *)
+        echo "WARNING: This script has not been verified with $MYTHBRANCH"
+        MYTHVER=${MYTHBRANCH//\//-}
+        ;;
 esac
 
 
@@ -549,13 +558,49 @@ else
 fi
 
 
+# Print the runtime environment
+function dumpenv() {
+    echo "$myname $myargs"
+    version
+
+    uname -a
+    echo "Cwd: $PWD"
+    which df > /dev/null && { df -h . ; echo "" ; }
+    which free > /dev/null && { free -m; echo "" ; }
+
+    evs="MYTHDIR MYTHWORK MYTHPATCHES MYTHGIT MYTHREPO SOURCEFORGE"
+    for ev in $evs ; do
+        echo "$ev=${!ev}"
+    done
+    echo ""
+
+    for pkg in $debug_packages ; do
+        dbg=${pkg}_DEBUG
+        echo "$dbg=${!dbg}"
+    done
+    echo ""
+
+    packages="MYTHTV MYTHPLUGINS QT MYSQL FREETYPE LAME LIBEXIF LIBXML2\
+        LIBOGG LIBVORBIS FLAC LIBCDIO TAGLIB FFTW LIBSDL LIBVISUAL"
+    for pkg in $packages ; do
+        cfg=${pkg}_CFG
+        [ -n "${!cfg}" ] && echo "$cfg=\"${!cfg}\""
+    done
+
+    # Shell variable dump
+    #set -o posix; set
+
+    return 0
+}
+
+
 # Redirect output to log file as if invoked by: mythbuild.sh 2>&1 | tee -a mythbuild.log
 if [ "$logging" = "yes" ]; then
+    dumpenv >> "$logfile"
     pipe=`mktemp -u`
     if mkfifo "$pipe" >/dev/null 2>&1 ; then
 		trap "rm -f $pipe" EXIT
-		tee -a "${myname%.sh}.log" < "$pipe" &
-        echo "`version` invoked with: $myargs" >> "$pipe" 
+		tee -a "$logfile" < "$pipe" &
 		exec > "$pipe" 2>&1
 	else
 		echo "Unable to create named FIFO, logging disabled" >&2
@@ -615,17 +660,17 @@ else
         case "$name" in
             MYTHTV|mythtv)
                 rm -f "$MYTHDIR/mythtv/mythtv/$stampbuild"
-            ;;
+                ;;
             MYTHPLUGINS|mythplugins)
                 rm -f "$MYTHDIR/mythtv/mythplugins/$stampbuild"
-            ;;
+                ;;
             MYTHTHEMES|myththemes)
                 rm -f "$MYTHDIR/myththemes/$stampbuild"
-            ;;
+                ;;
             *)
                 [ -n "${!name}" ] || die "No such package: $name"
                 rm -f "$MYTHWORK/${!name}/$stampbuild"
-            ;;
+                ;;
         esac
         echo "NOTE: make $name"
     done
@@ -734,7 +779,8 @@ if [ ! -d "$name" ]; then
 fi
 popd >/dev/null
 
-if [ ! -d "$MYTHDIR/$MYTHPATCHES/mythtv-$MYTHVER" ]; then
+if [ ! -d "$MYTHDIR/$MYTHPATCHES/mythtv-$MYTHVER" -o \
+     ! -d "$MYTHDIR/$MYTHPATCHES/mythplugins-$MYTHVER" ]; then
     echo "WARNING: Patches are not available for the branch '$MYTHBRANCH'"
     echo "WARNING: Building MythTV may fail."
     read -p "Press [Return] to continue or [Control-C] to abort: "
@@ -755,22 +801,22 @@ function patchmingw() {
         i586-mingw32msvc) # Ubuntu 10.04, 10.10
             path1="/usr/$xprefix/include"
             path2="/usr/lib/gcc/$xprefix/$gccversion/include"
-        ;;
+            ;;
         i586-pc-mingw32) # Mandriva 2010.2 (32 bit)
             path1="/usr/$xprefix/sys-root/mingw/include"
             path2="/usr/lib/gcc/$xprefix/$gccversion/include"
-        ;;
+            ;;
         i686-pc-mingw32) # Fedora 14
             path1="/usr/$xprefix/sys-root/mingw/include"
             [ -d "/usr/lib64/gcc/$xprefix/$gccversion/include" ] && \
                 path2="/usr/lib64/gcc/$xprefix/$gccversion/include" ||
                 path2="/usr/lib/gcc/$xprefix/$gccversion/include"
-        ;;
+            ;;
         *mingw*)
             echo "WARNING: Guessing include paths"
             path1="/usr/${xprefix:+$xprefix/}include"
             path2="/usr/lib/gcc/${xprefix:+$xprefix/}$gccversion/include"
-        ;;
+            ;;
         *) die "Unable to patch this compiler: $xprefix" ;;
     esac
 
@@ -820,7 +866,7 @@ if [ "$MYTHTARGET" = "Windows" ] && ! check_float ; then
                     read -p "Press [Return] to continue or [Control-C] to abort "
                 fi
                 break
-            ;;
+                ;;
         esac
     done
 fi
@@ -909,14 +955,14 @@ case $arch in
             $make -s install
             popd >/dev/null
         fi
-    ;;
+        ;;
     ppc*)
         # To run mythtv need to build all shared libs withoot R_PPC_REL24 relocations.
         # 24-bit (4*16Meg) limit to pc relative addresses causes ld.so to fail
         export CFLAGS="-fPIC $CFLAGS"
         export CXXFLAGS="-fPIC $CXXFLAGS"
         export LDFLAGS="-fPIC $LDFLAGS"
-    ;;
+        ;;
 esac
 
 
@@ -1214,6 +1260,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     MYSQLW_LIB="lib/opt"
     if [ ! -e "$stampinstall" ]; then
         cd "$bindir"
+        # Create config file for Qt
         cat > mysql_config <<-END
 			#!/bin/sh
 			case "\$1" in
@@ -1489,24 +1536,25 @@ pushd "$name" >/dev/null
 if [ "$MYTHBRANCH" != $( gitbranch .) ]; then
     banner "Switching to $name branch $MYTHBRANCH"
 
+    # Get the current branch
     branch=`gitbranch "$MYTHDIR/mythtv"`}
     case "$branch" in
         fixes/*) branch=${branch#fixes/} ;;
     esac
 
-    pushd mythtv >/dev/null
-    [ -e config.mak ] && make_uninstall || true
-    undopatches "mythtv-$branch" || true
-    rm -f $stampconfig*
-    popd >/dev/null
-
     pushd mythplugins >/dev/null
-    [ -e Makefile ] && make_uninstall || true
+    [ -e Makefile ] && { make_uninstall; make_distclean; } || true
     undopatches "mythplugins-$branch" || true
     rm -f $stampconfig*
     popd >/dev/null
 
-    status=$( git status -s)
+    pushd mythtv >/dev/null
+    [ -e config.mak ] && { make_uninstall; make_distclean; } || true
+    undopatches "mythtv-$branch" || true
+    rm -f $stampconfig*
+    popd >/dev/null
+
+    status=$( git status -s -uno)
     if [ -n "$status" ]; then
         echo "WARNING: You requested to switch branches but have uncommited changes."
         echo "WARNING: Proceeding will discard those changes."
@@ -1532,6 +1580,14 @@ if [ ! -e "$stampconfig${MYTHBUILD:+.$MYTHBUILD}" -o -n "$MYTHTV_CFG" \
     rm -f $stampconfig*
     [ -e config.mak ] && { make_uninstall; make_distclean; } || true
 
+    # Remove the last traces left after make uninstall
+    # mythffmpeg is left in bin
+    rm -f $bindir/*myth*
+    # mythtv/libav... are left in inc
+    rm -rf $incdir/mythtv/
+    # liblibmythav... are left in lib
+    rm -f $libdir/lib*myth*
+
     [ "$MYTHTARGET" = "Windows" ] && rprefix="." || rprefix=".."
     [ -n "$xprefix" ] && cpu="--cpu=pentium3" || cpu="--cpu=host"
     # Mac B/W G3: MYTHTV_CFG="--cpu=g3" Install: libxxf86vm-dev libxv-dev libasound2-dev
@@ -1541,7 +1597,7 @@ if [ ! -e "$stampconfig${MYTHBUILD:+.$MYTHBUILD}" -o -n "$MYTHTV_CFG" \
         --disable-avdevice --disable-avfilter \
         --enable-libfftw3 --disable-directfb --disable-joystick-menu"
     if [ "$MYTHTARGET" = "Windows" ]; then
-        args="$args --disable-lirc --disable-symbol-visibility"
+        args="$args --disable-lirc --disable-firewire --disable-symbol-visibility"
     fi
 
     set -x
@@ -1667,11 +1723,16 @@ fi
 ###############################################################################
 # Create the installation
 ###############################################################################
-mythlibs="myth mythdb mythfreemheg mythmetadata mythtv mythui mythupnp mythlivemedia mythhdhomerun"
+mythlibs="myth mythfreemheg mythtv mythui mythupnp mythlivemedia mythhdhomerun"
 case "$MYTHVER" in
-    master|0.2[5-9]) mythlibs="$mythlibs mythbase" ;;
+    0.23*)        mythlibs="$mythlibs mythdb" ;;
+    0.24*)        mythlibs="$mythlibs mythdb mythmetadata" ;;
+    0.25*|master) mythlibs="$mythlibs mythbase mythmetadata" ;;
 esac
-ffmpeglibs="mythavcodec mythavcore mythavformat mythavutil mythswscale mythpostproc"
+ffmpeglibs="mythavcodec mythavformat mythavutil mythswscale"
+case "$MYTHVER" in
+    0.24*|0.25*|master) ffmpeglibs="$ffmpeglibs mythavcore mythpostproc" ;;
+esac
 xtralibs="xml2 freetype mp3lame dvdcss exif ogg vorbis vorbisenc tag cdio cdio_cdda cdio_paranoia visual-0.4"
 QTDLLS="QtCore QtGui QtNetwork QtOpenGL QtSql QtSvg QtWebKit QtXml Qt3Support"
 
@@ -1684,7 +1745,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     # Myth binaries
     ln -s $bindir/myth*.exe .
     for lib in $mythlibs ; do
-        ln -s $bindir/lib$lib-?.??.dll .
+        ln -s $bindir/lib$lib-*.dll .
     done
 
     # Mingw runtime
@@ -1708,7 +1769,7 @@ if [ "$MYTHTARGET" = "Windows" ]; then
     # FFmpeg
     shopt -s extglob
     for lib in $ffmpeglibs ; do
-        file="$bindir/lib$lib-@(?|??).dll"
+        file="$bindir/lib$lib-*.dll"
         ln -s $file .
     done
 
@@ -1791,12 +1852,12 @@ else
     done
 
     for lib in $mythlibs ; do
-        files="$files lib/lib$lib-?.??.so.?"
+        files="$files lib/lib$lib-*.so.?"
     done
 
     shopt -s extglob
     for lib in $ffmpeglibs ; do
-        files="$files lib/lib$lib.so.@(?|??)"
+        files="$files lib/lib$lib*.so.@(?|??)"
     done
 
     # External libs
