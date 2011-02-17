@@ -419,8 +419,13 @@ function gitclone() {
 # Get the current git branch
 # $1= path to .git
 function gitbranch() {
-    [ ! -d "$1/.git" ] && return 1
-    git --git-dir="$1/.git" branch --no-color|grep "^\*"|cut -c 3-
+    [ -d "$1/.git" ] && git --git-dir="$1/.git" branch --no-color|grep "^\*"|cut -d ' ' -f 2
+}
+
+# Get the most recent git tag
+# $1= path to .git
+function gitdescribe() {
+    [ -d "$1/.git" ] && git --git-dir="$1/.git" describe || echo "unknown"
 }
 
 # make distclean
@@ -485,6 +490,10 @@ function installed() {
 function dumpenv() {
     echo "$myname $myargs"
     version
+
+    echo ""
+    echo "MythTV version: `gitdescribe "$MYTHDIR/mythtv"`"
+    echo ""
 
     uname -a
     echo "Cwd: $PWD"
@@ -635,19 +644,24 @@ fi
 # Download the patches
 function get_patches() {
     pushd "$MYTHDIR" >/dev/null
-    local name=$MYTHPATCHES url=$MYTHPATCHES_URL
-    local arc=`basename "$url"`
-    [ ! -e "$arc" ] && { download "$url"; rm -rf "$name"; }
-    [ ! -d "$name" ] && unpack "$arc"
+    local arc=`basename "$MYTHPATCHES_URL"`
+    if [ "$cleanbuild" = "yes" ]; then
+        [ ! -L "$MYTHPATCHES" ] && rm -rf "$MYTHPATCHES" "$arc"
+    fi
+    if [ ! -d "$MYTHPATCHES" ]; then
+        [ ! -e "$arc" ] && download "$MYTHPATCHES_URL"
+        unpack "$arc"
+    fi
     popd >/dev/null
 }
+
 
 # Apply/reverse Myth patches
 # $1=message $2=action $3.. args to patch
 function patchmyth() {
     local message=$1 action=$2
     shift 2
-    banner "$message all MythTV branch $MYTHBRANCH patches."
+    banner "$message all MythTV branch $MYTHBRANCH patches." >&2
     read -p "Press [Return] to continue or [Control-C] to abort: "
 
     get_patches
@@ -674,8 +688,8 @@ esac
 
 
 # Display Myth branch & build type and wait for OK
-banner "Building MythTV branch '$MYTHBRANCH' ($MYTHBUILD) for $MYTHTARGET"
-[ "$cleanbuild" = "yes" ] && echo "WARNING: All packages will be rebuilt from scratch."
+banner "Building MythTV branch '$MYTHBRANCH' ($MYTHBUILD) for $MYTHTARGET" >&2
+[ "$cleanbuild" = "yes" ] && echo "WARNING: All packages will be rebuilt from scratch." >&2
 read -p "Press [Return] to continue or [Control-C] to abort: "
 echo ""
 
@@ -850,7 +864,6 @@ fi
 
 
 # Download the patches
-[ "$cleanbuild" = "yes" ] && rm -f "$MYTHDIR/`basename "$MYTHPATCHES_URL"`"
 get_patches
 if [ ! -d "$MYTHDIR/$MYTHPATCHES/mythtv-$MYTHVER" -o \
      ! -d "$MYTHDIR/$MYTHPATCHES/mythplugins-$MYTHVER" ]; then
@@ -1605,11 +1618,11 @@ name="mythtv"
 [ ! -d $name ] && gitclone -b $MYTHBRANCH "$MYTHGIT/$name.git" $name
 pushd "$name" >/dev/null
 
-if [ "$MYTHBRANCH" != $( gitbranch .) ]; then
-    banner "Switching to $name branch $MYTHBRANCH"
+branch=`gitbranch .`
+if [ "$MYTHBRANCH" != "$branch" ]; then
+    banner "Switching to $name branch $MYTHBRANCH" >&2
 
     # Get the current branch
-    branch=`gitbranch "$MYTHDIR/mythtv"`}
     case "$branch" in
         fixes/*) branch=${branch#fixes/} ;;
     esac
@@ -1628,8 +1641,8 @@ if [ "$MYTHBRANCH" != $( gitbranch .) ]; then
 
     status=$( git status -s -uno)
     if [ -n "$status" ]; then
-        echo "WARNING: You requested to switch branches but have uncommited changes."
-        echo "WARNING: Proceeding will discard those changes."
+        echo "WARNING: You requested to switch branches but have uncommited changes." >&2
+        echo "WARNING: Proceeding will discard those changes." >&2
         read -p "Press [Return] to continue or [Control-C] to abort: "
         #pause $readtimeout "Press [Return] to continue or [Control-C] to abort: "
     fi
@@ -1970,32 +1983,40 @@ banner "Finished"
 
 echo "To run a myth program, such as mythfrontend, execute:"
 if [ "$MSYSTEM" = "MINGW32" ]; then
-    echo "${windir#$currdir/}/mythfrontend"
-    echo ""
-    echo "Persisent settings are stored in c:\Documents and Settings\[user]\.mythtv"
-    echo "To use a different location prepend MYTHCONFDIR=<path>"
+	cat <<-EOF
+	${windir#$currdir/}/mythfrontend
+
+	Persisent settings are stored in c:\Documents and Settings\[user]\.mythtv
+	To use a different location prepend MYTHCONFDIR=<path>
+	EOF
 elif [ "$MYTHTARGET" = "Windows" ]; then
-    echo "wine ${windir#$currdir/}/mythfrontend -p"
-    echo ""
-    echo "Click 'Set configuration manually'"
-    echo "On the page 'Database Configuration 2/2' set 'Use a custom identifier...'"
-    echo "Enter a name, e.g. wine, otherwise the host's settings will be used."
-    echo ""
-    echo "Persisent settings are stored in c:/users/[name]/.xmyth"
-    echo "To use a different location prepend MYTHCONFDIR=z:<path>"
+	cat <<-EOF
+	wine ${windir#$currdir/}/mythfrontend -p
+
+	Click 'Set configuration manually'
+	On the page 'Database Configuration 2/2' set 'Use a custom identifier...'
+	Enter a name, e.g. wine, otherwise the host's settings will be used.
+
+	Persisent settings are stored in c:/users/[name]/.mythtv
+	To use a different location prepend MYTHCONFDIR=z:<path>
+	EOF
 else
-    echo "${bindir#$currdir/}/mythfrontend"
-    echo ""
-    echo "If the installtion is moved from $MYTHINSTALL then prepend:"
-    echo "LD_LIBRARY_PATH=\"<path>/lib:<path>/lib/mysql\" QT_PLUGIN_PATH=\"<path>/plugins\""
-    echo ""
-    echo "Persisent settings are stored in ~/.xmyth"
-    echo "To use a different location prepend MYTHCONFDIR=path"
+	cat <<-EOF
+	${bindir#$currdir/}/mythfrontend
+
+	If the installtion is moved from $MYTHINSTALL then prepend:
+	LD_LIBRARY_PATH="<path>/lib:<path>/lib/mysql" QT_PLUGIN_PATH="<path>/plugins"
+
+	Persisent settings are stored in ~/.mythtv
+	To use a different location prepend MYTHCONFDIR=path
+	EOF
 fi
 
-echo ""
-echo "To simplify setting up and running MythTV on Linux or Windows, try this script:"
-echo "wget http://www.softsystem.co.uk/download/mythtv/mythrun && chmod +x mythrun"
-echo "Run mythfrontend: ./mythrun fe [args]"
-echo "Run mythbackend: ./mythrun be [args]"
-echo "Run mythtv-setup: ./mythrun su [args]"
+cat <<-EOF
+
+To simplify setting up and running MythTV on Linux or Windows, try this script:
+wget http://www.softsystem.co.uk/download/mythtv/mythrun && chmod +x mythrun
+Run mythfrontend: ./mythrun fe [args]
+Run mythbackend: ./mythrun be [args]
+Run mythtv-setup: ./mythrun su [args]
+EOF
