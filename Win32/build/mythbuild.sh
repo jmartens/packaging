@@ -272,11 +272,11 @@ readonly forcebuild=$@
 # Install a package, $1= package
 function install_pkg() {
     echo "Installing $1..."
-    if which apt-get > /dev/null ; then
+    if which apt-get > /dev/null 2>&1 ; then
         sudo apt-get install $1 || die "Failed to install $1"
-    elif which yum >/dev/null ; then
+    elif which yum >/dev/null 2>&1 ; then
         sudo yum install $1 || die "Failed to install $1"
-    elif which urpmi >/dev/null ; then
+    elif which urpmi >/dev/null 2>&1 ; then
         sudo urpmi $1 || die "Failed to install $1"
     else
         die "Don't know how to install $1"
@@ -497,8 +497,8 @@ function dumpenv() {
 
     uname -a
     echo "Cwd: $PWD"
-    which df > /dev/null && { df -h . ; echo "" ; }
-    which free > /dev/null && { free -m; echo "" ; }
+    which df > /dev/null 2>&1 && { df -h . ; echo "" ; }
+    which free > /dev/null 2>&1 && { free -m; echo "" ; }
 
     evs="MYTHDIR MYTHWORK MYTHPATCHES MYTHGIT MYTHREPO SOURCEFORGE"
     for ev in $evs ; do
