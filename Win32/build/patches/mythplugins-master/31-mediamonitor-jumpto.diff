@@ -1,0 +1,41 @@
+diff --git a/mythplugins/mythgallery/mythgallery/main.cpp b/mythplugins/mythgallery/mythgallery/main.cpp
+index 44dcfcb..963ac24 100644
+--- mythplugins/mythgallery/mythgallery/main.cpp
++++ mythplugins/mythgallery/mythgallery/main.cpp
+@@ -61,7 +61,6 @@ static void handleMedia(MythMediaDevice *dev)
+ {
+     if (dev && dev->isUsable())
+     {
+-        GetMythMainWindow()->JumpTo("Main Menu");
+         run(dev);
+     }
+ }
+diff --git a/mythplugins/mythmusic/mythmusic/main.cpp b/mythplugins/mythmusic/mythmusic/main.cpp
+index 961c3e5..c6cf2d1 100644
+--- mythplugins/mythmusic/mythmusic/main.cpp
++++ mythplugins/mythmusic/mythmusic/main.cpp
+@@ -477,8 +477,6 @@ static void handleMedia(MythMediaDevice *cd)
+         return;
+     }
+ 
+-    GetMythMainWindow()->JumpTo("Main Menu");
+-
+     if (gCoreContext->GetNumSetting("AutoPlayCD", 0))
+     {
+         // Empty the playlist to ensure CD is played first
+diff --git a/mythplugins/mythvideo/mythvideo/main.cpp b/mythplugins/mythvideo/mythvideo/main.cpp
+index c943c7d..6b53121 100644
+--- mythplugins/mythvideo/mythvideo/main.cpp
++++ mythplugins/mythvideo/mythvideo/main.cpp
+@@ -215,11 +215,9 @@ namespace
+             case 0 : // Do nothing
+                 break;
+             case 1 : // Display menu (mythdvd)*/
+-                GetMythMainWindow()->JumpTo("Main Menu");
+                 mythplugin_run();
+                 break;
+             case 2 : // play DVD or Blu-ray
+-                GetMythMainWindow()->JumpTo("Main Menu");
+                 playDisc();
+                 break;
+             default:

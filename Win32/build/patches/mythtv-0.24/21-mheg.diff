@@ -1,0 +1,25 @@
+# Fixes a crash when the MHEG stream contain unrecognized content
+# First seen on BBC1 interactive 10-Feb-11
+# Analysis:
+# In Bitmap.cpp MHBitmap::ContentArrived calls MHERROR if content unrecognized
+# In logging.h MHERROR calls throw("Failed") which resulted in an uncaught exception.
+diff --git a/mythtv/libs/libmythfreemheg/Engine.cpp b/mythtv/libs/libmythfreemheg/Engine.cpp
+index 30eff93..fce1ea9 100644
+--- mythtv/libs/libmythfreemheg/Engine.cpp
++++ mythtv/libs/libmythfreemheg/Engine.cpp
+@@ -708,8 +708,13 @@ void MHEngine::CheckContentRequests()
+         if (m_Context->CheckCarouselObject(pContent->m_FileName) &&
+             m_Context->GetCarouselData(pContent->m_FileName, text))
+         {
+-            pContent->m_pRequester->ContentArrived((const unsigned char *)text.data(),
+-                                                   text.size(), this);
++            // If the content is not recognized catch the exception and continue
++            try {
++                pContent->m_pRequester->ContentArrived((const unsigned char *)text.data(),
++                                                       text.size(), this);
++            }
++            catch (char const *) {
++            }
+             // Remove from the list.
+             delete pContent;
+             it = m_ExternContentTable.erase(it);

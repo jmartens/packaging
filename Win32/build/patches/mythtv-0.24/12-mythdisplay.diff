@@ -1,0 +1,13 @@
+diff --git mythtv/libs/libmythui/mythdisplay.cpp mythtv/libs/libmythui/mythdisplay.cpp
+index 5de158a..67c285a 100644
+--- mythtv/libs/libmythui/mythdisplay.cpp
++++ mythtv/libs/libmythui/mythdisplay.cpp
+@@ -77,7 +77,7 @@ DisplayInfo MythDisplay::GetDisplayInfo(void)
+         ret.res    = QSize((uint)width, (uint)height);
+     }
+ 
+-#elif defined (Q_WS_X11)
++#elif defined (Q_WS_X11) && defined USING_X11
+     MythXDisplay *disp = OpenMythXDisplay();
+     if (!disp)
+         return ret;

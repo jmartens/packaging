@@ -1,0 +1,13 @@
+Patch naming:
+
+- All patches must end with a .diff extension.
+- Patches are applied in alphanumerical sort order:
+
+(11-19)*.diff: Required to build.
+
+(21-29)*.diff: Required to run.
+
+(31-39)*.diff: Desirable - functionality impaired without.
+
+(41-49)*.diff: Optional - added or improved functionality.
+
