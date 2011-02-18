@@ -1,0 +1,85 @@
+diff --git a/mythplugins/mytharchive/mytharchive/main.cpp b/mythplugins/mytharchive/mytharchive/main.cpp
+index f6e6e1d..54f7c79 100644
+--- mythplugins/mytharchive/mytharchive/main.cpp
++++ mythplugins/mytharchive/mytharchive/main.cpp
+@@ -55,6 +55,7 @@ static bool checkProcess(const QString &lockFile)
+         return true;
+     }
+ 
++#ifndef USING_MINGW
+     QString line(file.readLine(100));
+ 
+     pid_t pid = line.toInt(&bOK);
+@@ -72,6 +73,7 @@ static bool checkProcess(const QString &lockFile)
+         if (errno == ESRCH)
+             return false;
+     }
++#endif
+ 
+     return true;
+ }
+diff --git a/mythplugins/mytharchive/mytharchive/mythburn.cpp b/mythplugins/mytharchive/mytharchive/mythburn.cpp
+index 6c517bd..a787805 100644
+--- mythplugins/mytharchive/mytharchive/mythburn.cpp
++++ mythplugins/mytharchive/mytharchive/mythburn.cpp
+@@ -4,7 +4,6 @@
+ #include <unistd.h>
+ #include <iostream>
+ #include <cstdlib>
+-#include <sys/wait.h>  // for WIFEXITED and WEXITSTATUS
+ 
+ // qt
+ #include <QDir>
+@@ -25,6 +24,9 @@
+ #include <mythuicheckbox.h>
+ #include <mythuibuttonlist.h>
+ #include <mythuiprogressbar.h>
++#ifdef USING_MINGW
++#undef RemoveDirectory
++#endif
+ #include <util.h>
+ #include <mythsystem.h>
+ #include <exitcodes.h>
+diff --git a/mythplugins/mytharchive/mytharchivehelper/main.cpp b/mythplugins/mytharchive/mytharchivehelper/main.cpp
+index 7897c9b..17e0d00 100644
+--- mythplugins/mytharchive/mytharchivehelper/main.cpp
++++ mythplugins/mytharchive/mytharchivehelper/main.cpp
+@@ -26,9 +26,12 @@
+ 
+ #include <iostream>
+ #include <stdint.h>
++#ifndef USING_MINGW
+ #include <sys/wait.h>  // for WIFEXITED and WEXITSTATUS
++#endif
+ #include <unistd.h>
+ #include <cstdlib>
++#include <cstring>
+ 
+ #include <mythconfig.h>
+ #if CONFIG_DARWIN or defined(__FreeBSD__)
+@@ -60,6 +63,9 @@ using namespace std;
+ #include <mythdirs.h>
+ #include <mythconfig.h>
+ #include <mythsystem.h>
++#ifdef USING_MINGW
++#undef RemoveDirectory
++#endif
+ #include <util.h>
+ 
+ extern "C" {
+diff --git a/mythplugins/mytharchive/mytharchivehelper/pxsup2dast.c b/mythplugins/mytharchive/mytharchivehelper/pxsup2dast.c
+index 4b5f542..cc80510 100644
+--- mythplugins/mytharchive/mytharchivehelper/pxsup2dast.c
++++ mythplugins/mytharchive/mytharchivehelper/pxsup2dast.c
+@@ -275,7 +275,11 @@ static void xfseek0(FILE * stream, long offset)
+ 
+ static void xmkdir(const char * path, int mode) 
+ {
++#ifdef USING_MINGW
++    if (mkdir(path) < 0)
++#else
+     if (mkdir(path, mode) < 0)
++#endif
+         exc_throw(MiscError, "mkdir(%s, 0%o) failure:", path, mode);
+ }
+ 
