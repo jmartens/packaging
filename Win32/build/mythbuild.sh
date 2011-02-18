@@ -496,6 +496,7 @@ function dumpenv() {
     echo ""
 
     uname -a
+    which lscpu > /dev/null 2>&1 && { lscpu ; echo "" ; }
     echo "Cwd: $PWD"
     which df > /dev/null 2>&1 && { df -h . ; echo "" ; }
     which free > /dev/null 2>&1 && { free -m; echo "" ; }
