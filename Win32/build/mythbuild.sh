@@ -119,6 +119,8 @@ readonly packages2="LIBOGG LIBVORBIS FLAC LIBCDIO TAGLIB FFTW LIBSDL LIBVISUAL"
 : ${WINGIT_URL:="http://msysgit.googlecode.com/files/$WINGIT.exe"}
 : ${WININSTALLER:="mythinstaller-win32"}
 : ${WININSTALLER_URL:="http://www.softsystem.co.uk/download/mythtv/$WININSTALLER.tar.bz2"}
+: ${WINCCACHE:="ccache"}
+: ${WINCCACHE_URL:="git://github.com/ramiropolla/$WINCCACHE.git"}
 
 # Debug build: yes|no|auto, auto=follow MYTHBUILD
 : ${QT_DEBUG:="auto"}
@@ -856,6 +858,37 @@ if ! git --version >/dev/null 2>&1 ; then
             exit 1
         fi
     fi
+fi
+
+
+# ccache (only when building natively, using MinGW on Windows)
+if [ "$MYTHTARGET" = "Windows" -a "$MSYSTEM" == "MINGW32" ]; then
+    # Native build
+    name=$WINCCACHE; url=$WINCCAHCE_URL;
+
+    banner "Building $name..."
+
+    # Grab the code
+    [ ! -d "$name" ] && git clone $WINCCACHE_URL $name
+
+    # Build it
+    pushd "$name" >/dev/null
+    ./autogen.sh
+    ./configure
+    make
+    make install
+    popd >/dev/null
+
+    # Implement wrapper scripts (symlinking results in strange errors)
+    banner "Generating wrapper scripts..."
+    pushd /usr/local/bin >/dev/null
+    for c in cpp c++ gcc g++
+    do
+        echo "#!/bin/bash" > $c
+        echo "ccache $c.exe \"\$@\"" >> $c
+        chmod a+x $c
+    done
+    popd >/dev/null
 fi
 
 
