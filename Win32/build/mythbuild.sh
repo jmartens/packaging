@@ -501,18 +501,27 @@ function dumpenv() {
     which df > /dev/null 2>&1 && { df -h . ; echo "" ; }
     which free > /dev/null 2>&1 && { free -m; echo "" ; }
 
-    evs="MYTHDIR MYTHWORK MYTHPATCHES MYTHGIT MYTHREPO SOURCEFORGE"
+    local ev evs="MYTHDIR MYTHWORK MYTHPATCHES MYTHGIT MYTHREPO SOURCEFORGE"
     for ev in $evs ; do
         echo "$ev=${!ev}"
     done
     echo ""
 
+    local param param1="MYTHTARGET MYTHBUILD MYTHBRANCH readtimeout logging patches"
+    local param2="cleanbuild reconfig cpu cpus makeflags dosudo"
+    for param in $param1 $param2 ; do
+        echo "$param=${!param}"
+    done
+    echo ""
+
+    local pkg dbg
     for pkg in $debug_packages ; do
         dbg=${pkg}_DEBUG
         echo "$dbg=${!dbg}"
     done
     echo ""
 
+    local cfg
     for pkg in $packages1 $packages2 ; do
         cfg=${pkg}_CFG
         [ -n "${!cfg}" ] && echo "$cfg=\"${!cfg}\""
@@ -1675,7 +1684,7 @@ if [ ! -e "$stampconfig${MYTHBUILD:+.$MYTHBUILD}" -o -n "$MYTHTV_CFG" \
     $dosudo rm -f $libdir/lib*myth*
 
     [ "$MYTHTARGET" = "Windows" ] && rprefix="." || rprefix=".."
-    # Mac B/W G3: MYTHTV_CFG="--cpu=g3" Install: libxxf86vm-dev libxv-dev libasound2-dev
+    # Mac B/W G3: MYTHTV_CFG="--cpu=g3" Install: libxxf86vm-dev libxv-dev libasound2-dev libnet-upnp-perl
 
     args="--sysinclude=$incdir \
         --extra-cflags=-I$incdir --extra-cxxflags=-I$incdir --extra-libs=-L$libdir \
